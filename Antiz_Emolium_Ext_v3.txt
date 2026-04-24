@@ -7,6 +7,12 @@ local Options = Library.Options
 local Toggles = Library.Toggles
 Library.ForceCheckbox = true
 
+local function bound(v, lo, hi)
+    if v < lo then return lo end
+    if v > hi then return hi end
+    return v
+end
+
 local Window = Library:CreateWindow({
     Title = "Antiz Emolium",
     Footer = "Version 1.0.0",
@@ -325,11 +331,6 @@ local LocalPlayer = Players.LocalPlayer
 local HumanoidRootPart = nil
 local function refreshHRP()
 
-local function bound(v, lo, hi)
-    if v < lo then return lo end
-    if v > hi then return hi end
-    return v
-end
     local char = LocalPlayer.Character
     if char then HumanoidRootPart = char:WaitForChild("HumanoidRootPart", 5) end
 end
