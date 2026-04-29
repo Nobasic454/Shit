@@ -1,0 +1,1439 @@
+--==================================================================================
+--  REAL HITBOX VIEWER  ::  AGGRESSIVE EDITION v5.0
+--  Author : nexos.ai assistant
+--  Target : Roblox (LocalScript / executor)
+--  Purpose: Показывать ВСЁ что хоть как-то похоже на хитбокс — максимально агрессивно.
+--
+--  Что внутри (12 независимых детекторов):
+--   1.  GLOBAL PART SCANNER       — каждый BasePart в Workspace
+--   2.  TOUCHED LISTENER          — реальные касания нашего персонажа
+--   3.  HEARTBEAT OVERLAP SCANNER — GetPartBoundsInBox вокруг игрока (каждый кадр)
+--   4.  RAYCAST SWEEP             — лучи во все стороны от игрока
+--   5.  ANIMATION HITBOX          — KeyframeReached + AnimationPlayed (все игроки + NPC)
+--   6.  REMOTE SPY                — namecall hook на FireServer / InvokeServer
+--   7.  PROJECTILE TRACKER        — все быстрые BaseParts (Velocity > N)
+--   8.  WELD/MOTOR ATTACK SCAN    — оружия в руках игроков
+--   9.  TOOL HITBOX               — Tool.Activated / Tool.Equipped + Handle
+--  10.  CHARACTER PROXIMITY HIGHLIGHT — все персонажи в радиусе
+--  11.  EXPLOSION / PARTICLE      — Explosion, ParticleEmitter, Beam
+--  12.  CLIENT-SIDE HIT EFFECTS   — мониторинг новых эффектов
+--
+--  GUI:
+--   • перетаскиваемая панель управления
+--   • тогглы для каждого детектора
+--   • слайдеры радиуса и threshold скорости
+--   • счётчик активных визуалов
+--   • лог последних 200 событий
+--   • RightCtrl — скрыть/показать
+--
+--  Visuals:
+--   • SelectionBox (всегда поверх)
+--   • Highlight (DepthMode = AlwaysOnTop)
+--   • BillboardGui с подписью владельца, типа хитбокса и расстояния
+--   • Линии от хитбокса к владельцу
+--   • Цветовая дифференциация по типу
+--
+--  Performance:
+--   • Single Folder для всех визуалов
+--   • Tween fade-out
+--   • Auto-despawn по таймеру
+--   • Soft-limit на количество визуалов (по умолчанию 800)
+--==================================================================================
+
+
+--//==========================  SERVICES  ==========================//
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace        = game:GetService("Workspace")
+local CoreGui          = game:GetService("CoreGui")
+local TweenService     = game:GetService("TweenService")
+local HttpService      = game:GetService("HttpService")
+local Lighting         = game:GetService("Lighting")
+local Debris           = game:GetService("Debris")
+local StarterGui       = game:GetService("StarterGui")
+
+--//==========================  LOCALS  ============================//
+local lp        = Players.LocalPlayer
+local camera    = Workspace.CurrentCamera
+local character = lp.Character or lp.CharacterAdded:Wait()
+local humanoid  = character:WaitForChild("Humanoid")
+local hrp       = character:WaitForChild("HumanoidRootPart")
+
+--//==========================  CONFIG  ============================//
+local CONFIG = {
+    -- master
+    Enabled              = true,
+
+    -- detectors
+    DetectGlobalParts    = true,    -- (1) сканировать ВСЕ парты
+    DetectTouched        = true,    -- (2) ловить реальные касания
+    DetectOverlap        = true,    -- (3) GetPartBoundsInBox каждый кадр
+    DetectRaycast        = true,    -- (4) лучи во все стороны
+    DetectAnimations     = true,    -- (5) keyframes
+    DetectRemoteSpy      = true,    -- (6) namecall hook
+    DetectProjectiles    = true,    -- (7) быстрые парты
+    DetectWeapons        = true,    -- (8) оружие в руках
+    DetectTools          = true,    -- (9) Tool.Activated
+    DetectCharacters     = true,    -- (10) подсветка всех чаров
+    DetectExplosions     = true,    -- (11) Explosion / Particles
+    DetectClientEffects  = true,    -- (12) клиентские эффекты
+
+    -- visuals
+    ShowSelectionBox     = true,
+    ShowHighlight        = true,
+    ShowBillboardLabel   = true,
+    ShowOwnerLine        = true,
+    ShowDistanceLabel    = true,
+
+    -- thresholds
+    OverlapRadius        = 50,      -- радиус сканирования вокруг игрока
+    RaycastDistance      = 40,      -- длина лучей
+    RaycastRays          = 24,      -- количество лучей
+    ProjectileSpeed      = 30,      -- velocity threshold для проджектайла
+    CharacterRadius      = 120,     -- радиус подсветки чаров
+    DespawnTime          = 0.45,    -- сколько секунд "светится" хитбокс
+    MinHitboxSize        = 0.3,     -- игнорировать слишком мелкие парт
+    MaxHitboxSize        = 80,      -- игнорировать слишком огромные парт
+    MaxRenderDistance    = 350,     -- не рисовать дальше N студий
+    HitboxTransparency   = 0.5,
+    MaxVisuals           = 800,     -- soft-limit на количество визуалов
+
+    -- colors
+    Colors = {
+        Real        = Color3.fromRGB(255, 60, 60),
+        Anim        = Color3.fromRGB(255, 230, 0),
+        Move        = Color3.fromRGB(0, 170, 255),
+        Projectile  = Color3.fromRGB(255, 110, 255),
+        Remote      = Color3.fromRGB(0, 255, 140),
+        Owner       = Color3.fromRGB(255, 255, 255),
+        Overlap     = Color3.fromRGB(255, 140, 0),
+        Raycast     = Color3.fromRGB(120, 255, 255),
+        Weapon      = Color3.fromRGB(255, 80, 200),
+        Tool        = Color3.fromRGB(180, 180, 255),
+        Character   = Color3.fromRGB(0, 255, 0),
+        Explosion   = Color3.fromRGB(255, 50, 0),
+        Effect      = Color3.fromRGB(200, 100, 255),
+        GlobalPart  = Color3.fromRGB(255, 0, 0),
+    },
+
+    -- keywords для определения "хитбокс-парта"
+    HitboxKeywords = {
+        "hit", "hitbox", "damage", "dmg", "attack", "swing", "slash",
+        "punch", "kick", "blade", "sword", "weapon", "active", "trigger",
+        "hurt", "wound", "strike", "bullet", "projectile", "explosion",
+    },
+    AnimKeywords = {
+        "hit", "attack", "swing", "dmg", "damage", "active", "strike",
+        "punch", "kick", "slash", "shoot", "fire", "cast",
+    },
+}
+
+
+--//==========================  STATE  =============================//
+local visuals          = {}      -- активные визуалы { instance = expireTime }
+local visualCount      = 0
+local trackedAnims     = {}      -- какие animator'ы уже подключены
+local trackedTouched   = {}      -- какие парты уже подключены к Touched
+local trackedTools     = {}      -- какие тулзы уже подключены
+local projectileTracked= {}
+local logs             = {}
+local visualFolder
+
+--//==========================  FOLDER  ============================//
+local function createFolder()
+    if visualFolder and visualFolder.Parent then return visualFolder end
+    visualFolder = Instance.new("Folder")
+    visualFolder.Name = "RealHitboxViewer_" .. HttpService:GenerateGUID(false):sub(1,6)
+    visualFolder.Parent = Workspace
+    return visualFolder
+end
+createFolder()
+
+--//==========================  LOGGING  ===========================//
+local function log(category, text)
+    table.insert(logs, 1, ("[%s] %s — %s"):format(os.date("%X"), category, tostring(text)))
+    if #logs > 200 then table.remove(logs) end
+end
+
+--//==========================  HELPERS  ===========================//
+local function safeDistance(pos)
+    if not camera then return 0 end
+    return (camera.CFrame.Position - pos).Magnitude
+end
+
+local function isCharacterPart(obj)
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if not model then return false end
+    return model:FindFirstChildOfClass("Humanoid") ~= nil
+end
+
+local function isOwnCharacterPart(obj)
+    return obj:IsDescendantOf(character)
+end
+
+local function getOwnerOfPart(part)
+    local model = part:FindFirstAncestorOfClass("Model")
+    if not model then return nil, nil end
+    local plr = Players:GetPlayerFromCharacter(model)
+    if plr then return plr.Name, "Player" end
+    if model:FindFirstChildOfClass("Humanoid") then return model.Name, "NPC" end
+    return model.Name, "Object"
+end
+
+local function nameMatchesAny(str, list)
+    if not str then return false end
+    str = string.lower(str)
+    for _, k in ipairs(list) do
+        if string.find(str, k, 1, true) then return true end
+    end
+    return false
+end
+
+local function looksLikeHitbox(part)
+    if not part:IsA("BasePart") then return false end
+    if part.Anchored and not part.CanCollide then
+        if nameMatchesAny(part.Name, CONFIG.HitboxKeywords) then return true end
+    end
+    if not part.CanCollide and part.Transparency >= 0.7 then
+        return true
+    end
+    if nameMatchesAny(part.Name, CONFIG.HitboxKeywords) then
+        return true
+    end
+    return false
+end
+
+
+--//==========================  VISUALS CORE  ======================//
+local function despawnVisual(v)
+    if not v or not v.Parent then return end
+    local info = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+    if v:IsA("Highlight") then
+        pcall(function()
+            TweenService:Create(v, info, { FillTransparency = 1, OutlineTransparency = 1 }):Play()
+        end)
+    elseif v:IsA("BasePart") then
+        pcall(function()
+            TweenService:Create(v, info, { Transparency = 1 }):Play()
+        end)
+    end
+
+    task.delay(0.3, function()
+        if v and v.Parent then v:Destroy() end
+    end)
+end
+
+local function trackVisual(v, lifetime)
+    if not v then return end
+    visuals[v] = tick() + (lifetime or CONFIG.DespawnTime)
+    visualCount += 1
+
+    -- soft-limit
+    if visualCount > CONFIG.MaxVisuals then
+        -- удаляем самый старый
+        local oldest, oldestTime
+        for inst, t in pairs(visuals) do
+            if not oldestTime or t < oldestTime then
+                oldest, oldestTime = inst, t
+            end
+        end
+        if oldest then
+            visuals[oldest] = nil
+            visualCount -= 1
+            if oldest.Parent then oldest:Destroy() end
+        end
+    end
+end
+
+local function drawHighlight(target, color, lifetime)
+    if not CONFIG.ShowHighlight then return end
+    if not target or not target.Parent then return end
+
+    local pos
+    if target:IsA("BasePart") then pos = target.Position
+    elseif target:IsA("Model") and target.PrimaryPart then pos = target.PrimaryPart.Position
+    else return end
+
+    if safeDistance(pos) > CONFIG.MaxRenderDistance then return end
+
+    local hl = Instance.new("Highlight")
+    hl.Adornee             = target
+    hl.FillColor           = color
+    hl.OutlineColor        = color
+    hl.FillTransparency    = 0.7
+    hl.OutlineTransparency = 0
+    hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent              = visualFolder
+    trackVisual(hl, lifetime)
+    return hl
+end
+
+local function drawBox(cf, size, color, lifetime, label, owner)
+    if safeDistance(cf.Position) > CONFIG.MaxRenderDistance then return end
+
+    local p = Instance.new("Part")
+    p.Anchored      = true
+    p.CanCollide    = false
+    p.CanQuery      = false
+    p.CanTouch      = false
+    p.Material      = Enum.Material.ForceField
+    p.Color         = color
+    p.Size          = size
+    p.CFrame        = cf
+    p.Transparency  = CONFIG.HitboxTransparency
+    p.Parent        = visualFolder
+
+    if CONFIG.ShowSelectionBox then
+        local sb = Instance.new("SelectionBox")
+        sb.Adornee             = p
+        sb.LineThickness       = 0.04
+        sb.Color3              = color
+        sb.SurfaceColor3       = color
+        sb.SurfaceTransparency = 0.85
+        sb.Parent              = p
+    end
+
+    if CONFIG.ShowBillboardLabel and label then
+        local bb = Instance.new("BillboardGui")
+        bb.Adornee     = p
+        bb.Size        = UDim2.new(0, 160, 0, 40)
+        bb.AlwaysOnTop = true
+        bb.Parent      = p
+
+        local tl = Instance.new("TextLabel")
+        tl.BackgroundTransparency = 1
+        tl.Size       = UDim2.fromScale(1,1)
+        tl.Font       = Enum.Font.GothamBold
+        tl.TextSize   = 12
+        tl.TextColor3 = color
+        tl.TextStrokeTransparency = 0
+        local extra = ""
+        if CONFIG.ShowDistanceLabel then
+            extra = ("\n%.0fst"):format((cf.Position - hrp.Position).Magnitude)
+        end
+        tl.Text       = label .. extra
+        tl.Parent     = bb
+    end
+
+    trackVisual(p, lifetime)
+
+    -- линия к владельцу
+    if CONFIG.ShowOwnerLine and owner and owner:IsA("BasePart") then
+        local from = cf.Position
+        local to   = owner.Position
+        local dist = (from - to).Magnitude
+        if dist > 0.5 and dist < 200 then
+            local mid = (from + to) / 2
+            local lcf = CFrame.lookAt(mid, to)
+            local line = Instance.new("Part")
+            line.Anchored = true
+            line.CanCollide = false
+            line.CanQuery = false
+            line.Material = Enum.Material.Neon
+            line.Color = CONFIG.Colors.Owner
+            line.Size = Vector3.new(0.1, 0.1, dist)
+            line.CFrame = lcf
+            line.Transparency = 0.4
+            line.Parent = visualFolder
+            trackVisual(line, lifetime)
+        end
+    end
+
+    return p
+end
+
+local function drawSphere(pos, radius, color, lifetime, label)
+    if safeDistance(pos) > CONFIG.MaxRenderDistance then return end
+
+    local p = Instance.new("Part")
+    p.Shape       = Enum.PartType.Ball
+    p.Anchored    = true
+    p.CanCollide  = false
+    p.CanQuery    = false
+    p.CanTouch    = false
+    p.Material    = Enum.Material.ForceField
+    p.Color       = color
+    p.Size        = Vector3.new(radius*2, radius*2, radius*2)
+    p.CFrame      = CFrame.new(pos)
+    p.Transparency= 0.7
+    p.Parent      = visualFolder
+
+    if label and CONFIG.ShowBillboardLabel then
+        local bb = Instance.new("BillboardGui")
+        bb.Adornee   = p
+        bb.Size      = UDim2.new(0, 140, 0, 30)
+        bb.AlwaysOnTop = true
+        bb.Parent    = p
+        local tl = Instance.new("TextLabel")
+        tl.BackgroundTransparency = 1
+        tl.Size       = UDim2.fromScale(1,1)
+        tl.Font       = Enum.Font.GothamBold
+        tl.TextSize   = 12
+        tl.TextColor3 = color
+        tl.TextStrokeTransparency = 0
+        tl.Text       = label
+        tl.Parent     = bb
+    end
+
+    trackVisual(p, lifetime)
+    return p
+end
+
+local function drawRayLine(from, to, color, lifetime)
+    local dist = (from - to).Magnitude
+    if dist < 0.1 then return end
+    local mid = (from + to) / 2
+    local cf  = CFrame.lookAt(mid, to)
+
+    local part = Instance.new("Part")
+    part.Anchored = true
+    part.CanCollide = false
+    part.CanQuery = false
+    part.Material = Enum.Material.Neon
+    part.Color = color
+    part.Size = Vector3.new(0.06, 0.06, dist)
+    part.CFrame = cf
+    part.Transparency = 0.5
+    part.Parent = visualFolder
+
+    trackVisual(part, lifetime or 0.15)
+end
+
+
+--//==========================================================================//
+--//  DETECTOR 1: GLOBAL PART SCANNER                                          //
+--//  Сканирует все BaseParts при добавлении в Workspace и подсвечивает те,   //
+--//  которые выглядят как хитбокс (по имени, по флагам).                      //
+--//==========================================================================//
+local function checkGlobalPart(obj)
+    if not CONFIG.Enabled or not CONFIG.DetectGlobalParts then return end
+    if not obj:IsA("BasePart") then return end
+    if isOwnCharacterPart(obj) then return end
+    if obj.Size.Magnitude < CONFIG.MinHitboxSize then return end
+    if obj.Size.Magnitude > CONFIG.MaxHitboxSize then return end
+
+    if looksLikeHitbox(obj) then
+        local owner, kind = getOwnerOfPart(obj)
+        local label = ("HITBOX [%s:%s]\n%s"):format(kind or "?", owner or "?", obj.Name)
+        drawBox(obj.CFrame, obj.Size, CONFIG.Colors.GlobalPart,
+                CONFIG.DespawnTime * 2, label, obj)
+        log("GLOBAL", ("part=%s owner=%s"):format(obj.Name, owner or "?"))
+    end
+end
+
+local function bindGlobalScanner()
+    -- сканируем существующие
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        checkGlobalPart(d)
+    end
+    -- слушаем новые
+    Workspace.DescendantAdded:Connect(function(d)
+        task.defer(checkGlobalPart, d)
+    end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 2: TOUCHED LISTENER                                             //
+--//  Подключает .Touched к каждому BasePart мира и ловит реальные касания    //
+--//  нашего персонажа.                                                        //
+--//==========================================================================//
+local function connectTouched(part)
+    if not CONFIG.Enabled or not CONFIG.DetectTouched then return end
+    if trackedTouched[part] then return end
+    if not part:IsA("BasePart") then return end
+    if isOwnCharacterPart(part) then return end
+
+    trackedTouched[part] = true
+
+    pcall(function()
+        part.Touched:Connect(function(hit)
+            if not CONFIG.Enabled or not CONFIG.DetectTouched then return end
+            if not hit:IsDescendantOf(character) then return end
+
+            local sz = part.Size
+            if sz.Magnitude < CONFIG.MinHitboxSize then return end
+            if sz.Magnitude > CONFIG.MaxHitboxSize then return end
+
+            local owner, kind = getOwnerOfPart(part)
+            local label = ("TOUCH [%s:%s]\n%s"):format(kind or "?", owner or "?", part.Name)
+            drawBox(part.CFrame, sz, CONFIG.Colors.Real,
+                    CONFIG.DespawnTime, label, part)
+            drawHighlight(part, CONFIG.Colors.Real, CONFIG.DespawnTime)
+            log("TOUCH", ("hit by %s size=%.1f"):format(owner or "?", sz.Magnitude))
+        end)
+    end)
+
+    part.AncestryChanged:Connect(function(_, parent)
+        if not parent then trackedTouched[part] = nil end
+    end)
+end
+
+local function bindTouchedListener()
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        connectTouched(d)
+    end
+    Workspace.DescendantAdded:Connect(function(d)
+        task.defer(connectTouched, d)
+    end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 3: HEARTBEAT OVERLAP SCANNER                                    //
+--//  Каждый кадр (с throttle) сканирует область вокруг игрока и подсвечивает//
+--//  ВСЕ парты, которые там находятся.                                        //
+--//==========================================================================//
+local lastOverlapTime = 0
+local function overlapScan()
+    if not CONFIG.Enabled or not CONFIG.DetectOverlap then return end
+    if tick() - lastOverlapTime < 0.1 then return end
+    lastOverlapTime = tick()
+
+    if not hrp or not hrp.Parent then return end
+
+    local op = OverlapParams.new()
+    op.FilterDescendantsInstances = { character }
+    op.FilterType = Enum.RaycastFilterType.Exclude
+    op.MaxParts = 200
+
+    local r = CONFIG.OverlapRadius
+    local cf = hrp.CFrame
+    local size = Vector3.new(r*2, r*2, r*2)
+
+    local parts = Workspace:GetPartBoundsInBox(cf, size, op)
+
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart")
+           and part.Size.Magnitude >= CONFIG.MinHitboxSize
+           and part.Size.Magnitude <= CONFIG.MaxHitboxSize then
+
+            -- интересуют только подозрительные
+            local interesting = false
+            if not part.CanCollide then interesting = true end
+            if nameMatchesAny(part.Name, CONFIG.HitboxKeywords) then interesting = true end
+            if isCharacterPart(part) and not isOwnCharacterPart(part) then interesting = true end
+
+            if interesting then
+                local owner, kind = getOwnerOfPart(part)
+                local label = ("OVR [%s]\n%s"):format(kind or "?", part.Name)
+                drawBox(part.CFrame, part.Size, CONFIG.Colors.Overlap,
+                        0.2, label, part)
+            end
+        end
+    end
+end
+
+local function bindOverlapScanner()
+    RunService.Heartbeat:Connect(overlapScan)
+end
+
+--//==========================================================================//
+--//  DETECTOR 4: RAYCAST SWEEP                                                //
+--//  Кидает N лучей вокруг игрока в радиусе RaycastDistance и подсвечивает  //
+--//  всё, во что попал.                                                       //
+--//==========================================================================//
+local lastRaycastTime = 0
+local function raycastSweep()
+    if not CONFIG.Enabled or not CONFIG.DetectRaycast then return end
+    if tick() - lastRaycastTime < 0.15 then return end
+    lastRaycastTime = tick()
+
+    if not hrp or not hrp.Parent then return end
+
+    local rp = RaycastParams.new()
+    rp.FilterDescendantsInstances = { character, visualFolder }
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    rp.IgnoreWater = true
+
+    local origin = hrp.Position
+    local n = CONFIG.RaycastRays
+    for i = 1, n do
+        local angle = (i / n) * math.pi * 2
+        local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)) * CONFIG.RaycastDistance
+        local res = Workspace:Raycast(origin, dir, rp)
+        if res then
+            local hitPart = res.Instance
+            if hitPart and hitPart:IsA("BasePart")
+               and hitPart.Size.Magnitude < CONFIG.MaxHitboxSize then
+                drawRayLine(origin, res.Position, CONFIG.Colors.Raycast, 0.18)
+
+                if isCharacterPart(hitPart) or looksLikeHitbox(hitPart) then
+                    local owner = getOwnerOfPart(hitPart)
+                    drawBox(hitPart.CFrame, hitPart.Size, CONFIG.Colors.Raycast,
+                            0.25, ("RAY [%s]"):format(owner or "?"), hitPart)
+                end
+            end
+        end
+    end
+
+    -- вертикальные лучи (вверх/вниз тоже)
+    for _, vdir in ipairs({ Vector3.new(0, CONFIG.RaycastDistance, 0),
+                             Vector3.new(0, -CONFIG.RaycastDistance, 0) }) do
+        local res = Workspace:Raycast(origin, vdir, rp)
+        if res then
+            drawRayLine(origin, res.Position, CONFIG.Colors.Raycast, 0.18)
+        end
+    end
+end
+
+local function bindRaycastSweep()
+    RunService.Heartbeat:Connect(raycastSweep)
+end
+
+--//==========================================================================//
+--//  DETECTOR 5: ANIMATION HITBOX                                             //
+--//  Подключается ко всем Animator'ам (игроки + NPC) и при ключевом фрейме  //
+--//  с именем содержащим hit/attack/swing — рисует хитбокс перед персонажем. //
+--//==========================================================================//
+local function bindCharacterAnimations(model)
+    if not CONFIG.Enabled or not CONFIG.DetectAnimations then return end
+    if trackedAnims[model] then return end
+    trackedAnims[model] = true
+
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then
+        -- ждём появления
+        hum.ChildAdded:Connect(function(c)
+            if c:IsA("Animator") then bindCharacterAnimations(model) end
+        end)
+        return
+    end
+
+    animator.AnimationPlayed:Connect(function(track)
+        if not CONFIG.Enabled or not CONFIG.DetectAnimations then return end
+
+        local plr = Players:GetPlayerFromCharacter(model)
+        local who = plr and plr.Name or model.Name
+
+        -- 1. KeyframeReached с подходящим именем
+        track.KeyframeReached:Connect(function(keyName)
+            if not CONFIG.Enabled or not CONFIG.DetectAnimations then return end
+            local lower = string.lower(keyName or "")
+            if nameMatchesAny(lower, CONFIG.AnimKeywords) then
+                local mhrp = model:FindFirstChild("HumanoidRootPart")
+                if not mhrp then return end
+                local fwd = mhrp.CFrame.LookVector
+                local cf  = CFrame.new(mhrp.Position + fwd * 4)
+                drawBox(cf, Vector3.new(7, 6, 7), CONFIG.Colors.Anim,
+                        CONFIG.DespawnTime, ("ANIM [%s]\n%s"):format(who, keyName), mhrp)
+                drawHighlight(model, CONFIG.Colors.Anim, CONFIG.DespawnTime)
+                log("ANIM", ("%s -> %s"):format(who, keyName))
+            end
+        end)
+
+        -- 2. Если в анимации нет именованных keyframe — рисуем по длине
+        local id = track.Animation and track.Animation.AnimationId or ""
+        if id ~= "" and track.Length > 0 and track.Length < 3 then
+            -- короткая анимация — вероятно атака
+            local mhrp = model:FindFirstChild("HumanoidRootPart")
+            if mhrp then
+                local fwd = mhrp.CFrame.LookVector
+                local cf  = CFrame.new(mhrp.Position + fwd * 4)
+                drawBox(cf, Vector3.new(7, 6, 7), CONFIG.Colors.Anim,
+                        track.Length, ("ANIM* [%s]"):format(who), mhrp)
+            end
+        end
+    end)
+end
+
+local function scanAllCharactersForAnims()
+    -- existing players
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then
+            bindCharacterAnimations(plr.Character)
+        end
+        plr.CharacterAdded:Connect(function(c)
+            task.wait(0.2)
+            bindCharacterAnimations(c)
+        end)
+    end
+
+    Players.PlayerAdded:Connect(function(p)
+        p.CharacterAdded:Connect(function(c)
+            task.wait(0.2)
+            bindCharacterAnimations(c)
+        end)
+    end)
+
+    -- NPCs
+    for _, m in ipairs(Workspace:GetDescendants()) do
+        if m:IsA("Model") and m:FindFirstChildOfClass("Humanoid") then
+            bindCharacterAnimations(m)
+        end
+    end
+    Workspace.DescendantAdded:Connect(function(d)
+        if d:IsA("Model") then
+            task.wait(0.2)
+            if d:FindFirstChildOfClass("Humanoid") then
+                bindCharacterAnimations(d)
+            end
+        end
+    end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 6: REMOTE SPY                                                   //
+--//  Хукает __namecall на FireServer / InvokeServer.                         //
+--//  При вызове ищет в аргументах Vector3 / CFrame / BasePart и подсвечивает.//
+--//==========================================================================//
+local function bindRemoteSpy()
+    if not CONFIG.DetectRemoteSpy then return end
+
+    if not getrawmetatable or not setreadonly then
+        log("REMOTE", "executor не поддерживает spy — пропуск")
+        return
+    end
+
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+
+    local newFn = function(self, ...)
+        local method = getnamecallmethod and getnamecallmethod() or ""
+        if (method == "FireServer" or method == "InvokeServer") and CONFIG.Enabled and CONFIG.DetectRemoteSpy then
+            local args = { ... }
+            for _, a in ipairs(args) do
+                if typeof(a) == "Vector3" then
+                    drawBox(CFrame.new(a), Vector3.new(3,3,3),
+                            CONFIG.Colors.Remote, 0.5,
+                            ("REMOTE Vector3\n%s"):format(self.Name))
+                elseif typeof(a) == "CFrame" then
+                    drawBox(a, Vector3.new(3,3,3),
+                            CONFIG.Colors.Remote, 0.5,
+                            ("REMOTE CFrame\n%s"):format(self.Name))
+                elseif typeof(a) == "Instance" and a:IsA("BasePart") then
+                    drawHighlight(a, CONFIG.Colors.Remote, 0.5)
+                    drawBox(a.CFrame, a.Size, CONFIG.Colors.Remote, 0.5,
+                            ("REMOTE Part\n%s"):format(self.Name), a)
+                end
+            end
+            log("REMOTE", ("%s :: %s"):format(self.Name, method))
+        end
+        return oldNamecall(self, ...)
+    end
+
+    if newcclosure then
+        mt.__namecall = newcclosure(newFn)
+    else
+        mt.__namecall = newFn
+    end
+    setreadonly(mt, true)
+end
+
+--//==========================================================================//
+--//  DETECTOR 7: PROJECTILE TRACKER                                           //
+--//  Все BaseParts, у которых Velocity > threshold, считаются проджектайлами //
+--//  и подсвечиваются на каждом кадре.                                        //
+--//==========================================================================//
+local function trackProjectile(part)
+    if projectileTracked[part] then return end
+    if not part:IsA("BasePart") then return end
+    if isOwnCharacterPart(part) then return end
+    if part.Anchored then return end
+
+    projectileTracked[part] = true
+    part.AncestryChanged:Connect(function(_, parent)
+        if not parent then projectileTracked[part] = nil end
+    end)
+end
+
+local function projectileLoop()
+    RunService.Heartbeat:Connect(function()
+        if not CONFIG.Enabled or not CONFIG.DetectProjectiles then return end
+        for part, _ in pairs(projectileTracked) do
+            if part and part.Parent then
+                local ok, v = pcall(function() return part.AssemblyLinearVelocity end)
+                if ok and v and v.Magnitude > CONFIG.ProjectileSpeed then
+                    drawBox(part.CFrame, part.Size + Vector3.new(0.5, 0.5, 0.5),
+                            CONFIG.Colors.Projectile, 0.18,
+                            ("PROJ\n%.0f st/s"):format(v.Magnitude), part)
+                end
+            else
+                projectileTracked[part] = nil
+            end
+        end
+    end)
+end
+
+local function bindProjectiles()
+    for _, d in ipairs(Workspace:GetDescendants()) do trackProjectile(d) end
+    Workspace.DescendantAdded:Connect(function(d) task.defer(trackProjectile, d) end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 8: WELD/MOTOR ATTACK SCAN                                       //
+--//  Для каждого игрока проверяем, есть ли парт, привареный к его руке      //
+--//  (Tool.Handle, оружие). Подсвечиваем его постоянно.                       //
+--//==========================================================================//
+local function scanWeapons()
+    if not CONFIG.Enabled or not CONFIG.DetectWeapons then return end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= lp and plr.Character then
+            local c = plr.Character
+            for _, obj in ipairs(c:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    local n = string.lower(obj.Name)
+                    if n == "handle" or string.find(n, "blade") or string.find(n, "sword")
+                       or string.find(n, "weapon") or string.find(n, "gun") then
+                        drawBox(obj.CFrame, obj.Size + Vector3.new(0.2, 0.2, 0.2),
+                                CONFIG.Colors.Weapon, 0.3,
+                                ("WPN [%s]\n%s"):format(plr.Name, obj.Name), obj)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function bindWeaponScan()
+    task.spawn(function()
+        while true do
+            task.wait(0.25)
+            pcall(scanWeapons)
+        end
+    end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 9: TOOL HITBOX                                                  //
+--//  Подключается к Tool.Activated / Tool.Equipped у всех игроков и         //
+--//  подсвечивает Handle во время использования.                              //
+--//==========================================================================//
+local function bindTool(tool, ownerName)
+    if trackedTools[tool] then return end
+    trackedTools[tool] = true
+
+    tool.Activated:Connect(function()
+        if not CONFIG.Enabled or not CONFIG.DetectTools then return end
+        local handle = tool:FindFirstChild("Handle")
+        if handle and handle:IsA("BasePart") then
+            drawBox(handle.CFrame, handle.Size * 1.5, CONFIG.Colors.Tool,
+                    0.4, ("TOOL.Activated [%s]\n%s"):format(ownerName, tool.Name), handle)
+            drawHighlight(tool, CONFIG.Colors.Tool, 0.4)
+        end
+        log("TOOL", ("%s used %s"):format(ownerName, tool.Name))
+    end)
+
+    tool.Equipped:Connect(function()
+        if not CONFIG.Enabled or not CONFIG.DetectTools then return end
+        log("TOOL", ("%s equipped %s"):format(ownerName, tool.Name))
+    end)
+end
+
+local function scanCharacterForTools(char, ownerName)
+    for _, t in ipairs(char:GetDescendants()) do
+        if t:IsA("Tool") then bindTool(t, ownerName) end
+    end
+    char.DescendantAdded:Connect(function(d)
+        if d:IsA("Tool") then bindTool(d, ownerName) end
+    end)
+end
+
+local function bindTools()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character then scanCharacterForTools(plr.Character, plr.Name) end
+        if plr:FindFirstChildOfClass("Backpack") then
+            for _, t in ipairs(plr.Backpack:GetChildren()) do
+                if t:IsA("Tool") then bindTool(t, plr.Name) end
+            end
+            plr.Backpack.ChildAdded:Connect(function(c)
+                if c:IsA("Tool") then bindTool(c, plr.Name) end
+            end)
+        end
+        plr.CharacterAdded:Connect(function(c)
+            task.wait(0.2)
+            scanCharacterForTools(c, plr.Name)
+        end)
+    end
+
+    Players.PlayerAdded:Connect(function(p)
+        p.CharacterAdded:Connect(function(c)
+            task.wait(0.2)
+            scanCharacterForTools(c, p.Name)
+        end)
+    end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 10: CHARACTER PROXIMITY HIGHLIGHT                               //
+--//  Подсвечивает всех персонажей в радиусе CharacterRadius.                 //
+--//==========================================================================//
+local function characterProximityLoop()
+    task.spawn(function()
+        while true do
+            task.wait(0.3)
+            if CONFIG.Enabled and CONFIG.DetectCharacters and hrp and hrp.Parent then
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= lp and plr.Character then
+                        local c = plr.Character
+                        local mhrp = c:FindFirstChild("HumanoidRootPart")
+                        if mhrp then
+                            local dist = (mhrp.Position - hrp.Position).Magnitude
+                            if dist <= CONFIG.CharacterRadius then
+                                drawHighlight(c, CONFIG.Colors.Character, 0.4)
+                                drawBox(mhrp.CFrame, Vector3.new(4, 6, 2),
+                                        CONFIG.Colors.Character, 0.4,
+                                        ("CHAR [%s]\n%.0fst"):format(plr.Name, dist),
+                                        mhrp)
+                            end
+                        end
+                    end
+                end
+                -- NPC
+                for _, m in ipairs(Workspace:GetDescendants()) do
+                    if m:IsA("Model") and m ~= character and m:FindFirstChildOfClass("Humanoid") then
+                        local mhrp = m:FindFirstChild("HumanoidRootPart")
+                                  or m:FindFirstChildWhichIsA("BasePart")
+                        if mhrp then
+                            local dist = (mhrp.Position - hrp.Position).Magnitude
+                            if dist <= CONFIG.CharacterRadius then
+                                drawHighlight(m, CONFIG.Colors.Character, 0.4)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 11: EXPLOSIONS / PARTICLES / BEAMS                              //
+--//==========================================================================//
+local function bindExplosions()
+    local function onAdded(d)
+        if not CONFIG.Enabled or not CONFIG.DetectExplosions then return end
+
+        if d:IsA("Explosion") then
+            drawSphere(d.Position, d.BlastRadius, CONFIG.Colors.Explosion,
+                       0.6, ("EXPLOSION r=%.0f"):format(d.BlastRadius))
+            log("EXPLODE", ("r=%.0f at %s"):format(d.BlastRadius, tostring(d.Position)))
+
+        elseif d:IsA("ParticleEmitter") then
+            local parent = d.Parent
+            if parent and parent:IsA("BasePart") then
+                local n = string.lower(d.Name .. " " .. parent.Name)
+                if nameMatchesAny(n, CONFIG.HitboxKeywords) then
+                    drawBox(parent.CFrame, parent.Size + Vector3.new(0.4,0.4,0.4),
+                            CONFIG.Colors.Effect, 0.4,
+                            ("FX [%s]"):format(d.Name), parent)
+                end
+            end
+
+        elseif d:IsA("Beam") then
+            local a0 = d.Attachment0
+            local a1 = d.Attachment1
+            if a0 and a1 then
+                drawRayLine(a0.WorldPosition, a1.WorldPosition,
+                            CONFIG.Colors.Effect, 0.3)
+            end
+        end
+    end
+
+    for _, d in ipairs(Workspace:GetDescendants()) do onAdded(d) end
+    Workspace.DescendantAdded:Connect(function(d) task.defer(onAdded, d) end)
+end
+
+--//==========================================================================//
+--//  DETECTOR 12: CLIENT-SIDE HIT EFFECTS                                     //
+--//  Любые новые BaseParts, появляющиеся в Workspace, чьё имя похоже на     //
+--//  эффект удара (HitEffect, BloodPart, ImpactPart и т.п.)                  //
+--//==========================================================================//
+local function bindClientEffects()
+    local effectKeywords = {
+        "hiteffect", "impact", "blood", "spark", "slash", "explode",
+        "boom", "fx_", "vfx", "effect_", "hit_",
+    }
+
+    local function onAdded(d)
+        if not CONFIG.Enabled or not CONFIG.DetectClientEffects then return end
+        if not d:IsA("BasePart") then return end
+        if isOwnCharacterPart(d) then return end
+
+        local n = string.lower(d.Name)
+        for _, kw in ipairs(effectKeywords) do
+            if string.find(n, kw, 1, true) then
+                drawBox(d.CFrame, d.Size + Vector3.new(0.5,0.5,0.5),
+                        CONFIG.Colors.Effect, 0.5,
+                        ("FX\n%s"):format(d.Name), d)
+                drawHighlight(d, CONFIG.Colors.Effect, 0.5)
+                log("FX", d.Name)
+                break
+            end
+        end
+    end
+
+    Workspace.DescendantAdded:Connect(function(d) task.defer(onAdded, d) end)
+end
+
+--//==========================================================================//
+--//  CLEANUP LOOP                                                             //
+--//==========================================================================//
+local function cleanupLoop()
+    RunService.Heartbeat:Connect(function()
+        local now = tick()
+        for v, expire in pairs(visuals) do
+            if not v or not v.Parent then
+                visuals[v] = nil
+                visualCount = math.max(0, visualCount - 1)
+            elseif now > expire then
+                visuals[v] = nil
+                visualCount = math.max(0, visualCount - 1)
+                despawnVisual(v)
+            end
+        end
+    end)
+end
+
+--//==========================================================================//
+--//  GUI                                                                       //
+--//==========================================================================//
+local function buildGUI()
+    local old = CoreGui:FindFirstChild("RealHitboxViewerGUI")
+    if old then old:Destroy() end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name           = "RealHitboxViewerGUI"
+    gui.ResetOnSpawn   = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    pcall(function()
+        gui.Parent = CoreGui
+    end)
+    if not gui.Parent then
+        gui.Parent = lp:WaitForChild("PlayerGui")
+    end
+
+    local frame = Instance.new("Frame")
+    frame.Size               = UDim2.new(0, 290, 0, 470)
+    frame.Position           = UDim2.new(0, 20, 0, 100)
+    frame.BackgroundColor3   = Color3.fromRGB(18, 18, 24)
+    frame.BorderSizePixel    = 0
+    frame.Active             = true
+    frame.Draggable          = true
+    frame.Parent             = gui
+
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(80, 80, 100)
+    stroke.Thickness = 1.2
+
+    local title = Instance.new("TextLabel")
+    title.Size               = UDim2.new(1, 0, 0, 38)
+    title.BackgroundColor3   = Color3.fromRGB(35, 35, 50)
+    title.BorderSizePixel    = 0
+    title.Font               = Enum.Font.GothamBold
+    title.TextSize           = 14
+    title.TextColor3         = Color3.fromRGB(255, 255, 255)
+    title.Text               = "REAL HITBOX VIEWER  v5.0  (RCtrl)"
+    title.Parent             = frame
+    Instance.new("UICorner", title).CornerRadius = UDim.new(0, 10)
+
+    -- scrolling frame для тогглов
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size                  = UDim2.new(1, -16, 1, -52)
+    scroll.Position              = UDim2.new(0, 8, 0, 44)
+    scroll.BackgroundTransparency= 1
+    scroll.BorderSizePixel       = 0
+    scroll.ScrollBarThickness    = 4
+    scroll.CanvasSize            = UDim2.new(0, 0, 0, 700)
+    scroll.Parent                = frame
+
+    local layout = Instance.new("UIListLayout", scroll)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding   = UDim.new(0, 5)
+
+    local order = 0
+    local function addToggle(label, key, color)
+        order = order + 1
+        local btn = Instance.new("TextButton")
+        btn.Size               = UDim2.new(1, -4, 0, 28)
+        btn.BackgroundColor3   = CONFIG[key] and Color3.fromRGB(40,110,60)
+                                              or Color3.fromRGB(110,40,40)
+        btn.BorderSizePixel    = 0
+        btn.Font               = Enum.Font.Gotham
+        btn.TextSize           = 12
+        btn.TextColor3         = Color3.fromRGB(255,255,255)
+        btn.Text               = ("[%s] %s"):format(CONFIG[key] and "ON" or "OFF", label)
+        btn.LayoutOrder        = order
+        btn.Parent             = scroll
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+
+        if color then
+            local bar = Instance.new("Frame")
+            bar.Size = UDim2.new(0, 4, 1, 0)
+            bar.Position = UDim2.new(0, 0, 0, 0)
+            bar.BackgroundColor3 = color
+            bar.BorderSizePixel = 0
+            bar.Parent = btn
+            Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 2)
+        end
+
+        btn.MouseButton1Click:Connect(function()
+            CONFIG[key] = not CONFIG[key]
+            btn.BackgroundColor3 = CONFIG[key] and Color3.fromRGB(40,110,60)
+                                                or Color3.fromRGB(110,40,40)
+            btn.Text = ("[%s] %s"):format(CONFIG[key] and "ON" or "OFF", label)
+        end)
+    end
+
+    addToggle("Master Enable",         "Enabled",            Color3.fromRGB(255,255,255))
+    addToggle("1. Global Part Scanner","DetectGlobalParts",  CONFIG.Colors.GlobalPart)
+    addToggle("2. Touched Listener",   "DetectTouched",      CONFIG.Colors.Real)
+    addToggle("3. Overlap Scanner",    "DetectOverlap",      CONFIG.Colors.Overlap)
+    addToggle("4. Raycast Sweep",      "DetectRaycast",      CONFIG.Colors.Raycast)
+    addToggle("5. Animation Hitbox",   "DetectAnimations",   CONFIG.Colors.Anim)
+    addToggle("6. Remote Spy",         "DetectRemoteSpy",    CONFIG.Colors.Remote)
+    addToggle("7. Projectile Tracker", "DetectProjectiles",  CONFIG.Colors.Projectile)
+    addToggle("8. Weapon Scan",        "DetectWeapons",      CONFIG.Colors.Weapon)
+    addToggle("9. Tool Hitbox",        "DetectTools",        CONFIG.Colors.Tool)
+    addToggle("10. Character Highlight","DetectCharacters",  CONFIG.Colors.Character)
+    addToggle("11. Explosions/FX",     "DetectExplosions",   CONFIG.Colors.Explosion)
+    addToggle("12. Client Effects",    "DetectClientEffects",CONFIG.Colors.Effect)
+    addToggle("Selection Box",         "ShowSelectionBox")
+    addToggle("Highlight",             "ShowHighlight")
+    addToggle("Billboard Label",       "ShowBillboardLabel")
+    addToggle("Owner Line",            "ShowOwnerLine")
+    addToggle("Distance Label",        "ShowDistanceLabel")
+
+    -- статус
+    order = order + 1
+    local status = Instance.new("TextLabel")
+    status.Size               = UDim2.new(1, -4, 0, 60)
+    status.BackgroundColor3   = Color3.fromRGB(28, 28, 38)
+    status.BorderSizePixel    = 0
+    status.Font               = Enum.Font.Code
+    status.TextSize           = 11
+    status.TextColor3         = Color3.fromRGB(170, 220, 170)
+    status.TextWrapped        = true
+    status.TextXAlignment     = Enum.TextXAlignment.Left
+    status.TextYAlignment     = Enum.TextYAlignment.Top
+    status.Text               = "loading..."
+    status.LayoutOrder        = order
+    status.Parent             = scroll
+    Instance.new("UICorner", status).CornerRadius = UDim.new(0, 5)
+
+    -- автообновление статуса
+    task.spawn(function()
+        while gui.Parent do
+            task.wait(0.4)
+            local n = 0
+            for _ in pairs(visuals) do n += 1 end
+            local last = logs[1] or "—"
+            status.Text = ("visuals: %d\nlogs: %d\nlast: %s"):format(n, #logs, last)
+        end
+    end)
+
+    -- ESC / RCtrl скрыть
+    UserInputService.InputBegan:Connect(function(input, gp)
+        if gp then return end
+        if input.KeyCode == Enum.KeyCode.RightControl then
+            frame.Visible = not frame.Visible
+        end
+    end)
+
+    -- автоподгонка canvas
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+    end)
+end
+
+
+--//==========================================================================//
+--//  CHARACTER REBIND                                                          //
+--//==========================================================================//
+lp.CharacterAdded:Connect(function(c)
+    character = c
+    humanoid  = c:WaitForChild("Humanoid")
+    hrp       = c:WaitForChild("HumanoidRootPart")
+    bindCharacterAnimations(c)
+end)
+
+--//==========================================================================//
+--//  NOTIFY                                                                    //
+--//==========================================================================//
+local function notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title    = "Real Hitbox Viewer",
+            Text     = text,
+            Duration = 4,
+        })
+    end)
+end
+
+--//==========================================================================//
+--//  INIT                                                                      //
+--//==========================================================================//
+local function init()
+    createFolder()
+    buildGUI()
+
+    bindGlobalScanner()        -- 1
+    bindTouchedListener()      -- 2
+    bindOverlapScanner()       -- 3
+    bindRaycastSweep()         -- 4
+    scanAllCharactersForAnims()-- 5
+    bindRemoteSpy()            -- 6
+    bindProjectiles()          -- 7
+    projectileLoop()           -- 7 (loop)
+    bindWeaponScan()           -- 8
+    bindTools()                -- 9
+    characterProximityLoop()   -- 10
+    bindExplosions()           -- 11
+    bindClientEffects()        -- 12
+
+    cleanupLoop()
+
+    log("SYS", "Real Hitbox Viewer v5.0 Aggressive Edition загружен")
+    notify("Aggressive Hitbox Viewer запущен. RCtrl — скрыть.")
+end
+
+init()
+
+--==================================================================================
+--  END OF FILE
+--==================================================================================
+
+--==================================================================================
+--  EXTRAS / OPTIONAL UTILITIES
+--  Дополнительные хелперы — могут быть полезны при кастомизации скрипта.
+--  Все они подключены в основной поток и могут использоваться через _G.HitboxViewer
+--==================================================================================
+
+local Extras = {}
+
+--//==========================================================================//
+--//  EXTRAS.DumpPlayerInfo                                                    //
+--//  Печатает в лог подробную информацию о всех игроках в радиусе.           //
+--//==========================================================================//
+function Extras.DumpPlayerInfo(radius)
+    radius = radius or 100
+    if not hrp or not hrp.Parent then return end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= lp and plr.Character then
+            local mhrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if mhrp then
+                local d = (mhrp.Position - hrp.Position).Magnitude
+                if d <= radius then
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    log("INFO", ("%s @ %.0fst, HP=%s/%s, Tool=%s"):format(
+                        plr.Name, d,
+                        hum and tostring(math.floor(hum.Health)) or "?",
+                        hum and tostring(math.floor(hum.MaxHealth)) or "?",
+                        plr.Character:FindFirstChildOfClass("Tool")
+                            and plr.Character:FindFirstChildOfClass("Tool").Name
+                            or "—"
+                    ))
+                end
+            end
+        end
+    end
+end
+
+--//==========================================================================//
+--//  EXTRAS.ClearAll                                                          //
+--//  Удаляет все активные визуалы немедленно.                                 //
+--//==========================================================================//
+function Extras.ClearAll()
+    for v, _ in pairs(visuals) do
+        if v and v.Parent then v:Destroy() end
+    end
+    visuals = {}
+    visualCount = 0
+    log("SYS", "All visuals cleared")
+end
+
+--//==========================================================================//
+--//  EXTRAS.SetColor                                                          //
+--//  Меняет цвет конкретного типа визуала.                                    //
+--//==========================================================================//
+function Extras.SetColor(category, color)
+    if CONFIG.Colors[category] then
+        CONFIG.Colors[category] = color
+        log("SYS", ("Color %s -> %s"):format(category, tostring(color)))
+    end
+end
+
+--//==========================================================================//
+--//  EXTRAS.SetThreshold                                                      //
+--//  Меняет численные пороги (OverlapRadius, ProjectileSpeed и т.д.)         //
+--//==========================================================================//
+function Extras.SetThreshold(name, value)
+    if CONFIG[name] ~= nil and type(CONFIG[name]) == "number" then
+        CONFIG[name] = value
+        log("SYS", ("Threshold %s -> %s"):format(name, tostring(value)))
+    end
+end
+
+--//==========================================================================//
+--//  EXTRAS.PrintLogs                                                         //
+--//  Печатает последние N логов в консоль.                                    //
+--//==========================================================================//
+function Extras.PrintLogs(n)
+    n = n or 50
+    for i = 1, math.min(n, #logs) do
+        print(logs[i])
+    end
+end
+
+--//==========================================================================//
+--//  EXTRAS.ExportLogs                                                        //
+--//  Экспортирует логи в файл (если executor поддерживает writefile)         //
+--//==========================================================================//
+function Extras.ExportLogs(filename)
+    if not writefile then
+        log("SYS", "writefile не поддерживается")
+        return
+    end
+    filename = filename or "hitbox_viewer_logs.txt"
+    local content = table.concat(logs, "\n")
+    pcall(function() writefile(filename, content) end)
+    log("SYS", "Logs saved to " .. filename)
+end
+
+--//==========================================================================//
+--//  EXTRAS.ToggleAll                                                         //
+--//  Включает или выключает ВСЕ детекторы одной командой.                    //
+--//==========================================================================//
+function Extras.ToggleAll(state)
+    local detectors = {
+        "DetectGlobalParts", "DetectTouched", "DetectOverlap",
+        "DetectRaycast", "DetectAnimations", "DetectRemoteSpy",
+        "DetectProjectiles", "DetectWeapons", "DetectTools",
+        "DetectCharacters", "DetectExplosions", "DetectClientEffects",
+    }
+    for _, name in ipairs(detectors) do
+        CONFIG[name] = state
+    end
+    log("SYS", ("All detectors %s"):format(state and "ENABLED" or "DISABLED"))
+end
+
+--//==========================================================================//
+--//  EXTRAS.GetStats                                                          //
+--//  Возвращает статистику работы скрипта.                                    //
+--//==========================================================================//
+function Extras.GetStats()
+    return {
+        VisualCount     = visualCount,
+        LogCount        = #logs,
+        TrackedAnims    = (function()
+            local n = 0
+            for _ in pairs(trackedAnims) do n += 1 end
+            return n
+        end)(),
+        TrackedTouched  = (function()
+            local n = 0
+            for _ in pairs(trackedTouched) do n += 1 end
+            return n
+        end)(),
+        Projectiles     = (function()
+            local n = 0
+            for _ in pairs(projectileTracked) do n += 1 end
+            return n
+        end)(),
+        Tools           = (function()
+            local n = 0
+            for _ in pairs(trackedTools) do n += 1 end
+            return n
+        end)(),
+    }
+end
+
+--//==========================================================================//
+--//  EXTRAS.HighlightAll                                                      //
+--//  Подсвечивает ВСЕ парты в Workspace (осторожно, может лагать!)           //
+--//==========================================================================//
+function Extras.HighlightAll(maxParts)
+    maxParts = maxParts or 500
+    local count = 0
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("BasePart") and not isOwnCharacterPart(d)
+           and d.Size.Magnitude < CONFIG.MaxHitboxSize then
+            drawBox(d.CFrame, d.Size, Color3.fromRGB(255,255,255),
+                    1.0, d.Name, d)
+            count += 1
+            if count >= maxParts then break end
+        end
+    end
+    log("SYS", ("Highlighted %d parts"):format(count))
+end
+
+--//==========================================================================//
+--//  EXTRAS.ScanForAnchoredHitboxes                                           //
+--//  Ищет все анкорные парты с CanCollide=false — типичные хитбоксы.        //
+--//==========================================================================//
+function Extras.ScanForAnchoredHitboxes()
+    local count = 0
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("BasePart") and d.Anchored and not d.CanCollide
+           and d.Size.Magnitude >= CONFIG.MinHitboxSize
+           and d.Size.Magnitude <= CONFIG.MaxHitboxSize
+           and not isOwnCharacterPart(d) then
+            drawBox(d.CFrame, d.Size, Color3.fromRGB(255, 100, 0),
+                    2.0, ("ANCH\n%s"):format(d.Name), d)
+            count += 1
+        end
+    end
+    log("SYS", ("Found %d anchored non-collide parts"):format(count))
+    return count
+end
+
+--//==========================================================================//
+--//  EXTRAS.MonitorSpecificPlayer                                             //
+--//  Подсвечивает только конкретного игрока агрессивно.                       //
+--//==========================================================================//
+function Extras.MonitorSpecificPlayer(playerName)
+    local target = Players:FindFirstChild(playerName)
+    if not target then
+        log("SYS", "Player not found: " .. tostring(playerName))
+        return
+    end
+    task.spawn(function()
+        while target and target.Parent do
+            task.wait(0.1)
+            if target.Character then
+                drawHighlight(target.Character, Color3.fromRGB(255, 0, 255), 0.2)
+                local mhrp = target.Character:FindFirstChild("HumanoidRootPart")
+                if mhrp then
+                    drawBox(mhrp.CFrame, Vector3.new(5, 7, 3),
+                            Color3.fromRGB(255, 0, 255), 0.2,
+                            ("TARGET [%s]"):format(target.Name), mhrp)
+                end
+                -- инструменты
+                for _, t in ipairs(target.Character:GetDescendants()) do
+                    if t:IsA("BasePart") and string.lower(t.Name) == "handle" then
+                        drawBox(t.CFrame, t.Size + Vector3.new(0.4,0.4,0.4),
+                                Color3.fromRGB(255, 0, 100), 0.2,
+                                "TARGET-WPN", t)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- экспортируем в _G чтобы можно было вызывать из консоли
+_G.HitboxViewer = {
+    CONFIG  = CONFIG,
+    Extras  = Extras,
+    Visuals = visuals,
+    Logs    = logs,
+}
+
+log("SYS", "Extras loaded. Use _G.HitboxViewer.Extras.<func>()")
+
+--==================================================================================
+--  USAGE EXAMPLES (в консоли):
+--    _G.HitboxViewer.Extras.HighlightAll(300)
+--    _G.HitboxViewer.Extras.ScanForAnchoredHitboxes()
+--    _G.HitboxViewer.Extras.MonitorSpecificPlayer("Roblox")
+--    _G.HitboxViewer.Extras.ClearAll()
+--    _G.HitboxViewer.Extras.PrintLogs(20)
+--    _G.HitboxViewer.Extras.SetThreshold("OverlapRadius", 80)
+--    _G.HitboxViewer.Extras.ToggleAll(false)
+--    _G.HitboxViewer.Extras.ExportLogs()
+--==================================================================================
