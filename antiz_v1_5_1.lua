@@ -12,8 +12,8 @@ local Toggles = Library.Toggles
 Library.ForceCheckbox = true
 
 local Window = Library:CreateWindow({
-    Title = "Antiz",
-    Footer = "1.4.3",
+    Title = "Anti Ragelity",
+    Footer = "1.5.1",
     ShowCustomCursor = true,
 })
 
