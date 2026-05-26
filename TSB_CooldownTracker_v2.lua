@@ -566,7 +566,7 @@ local function buildOverhead(p)
     bill.Adornee        = head
     bill.Size           = UDim2.new(0, ohW, 0, totH)
     bill.StudsOffset    = Vector3.new(0, Options.OHStuds.Value, 0)
-    bill.AlwaysOnTop    = Options.OHTop.Value
+    bill.AlwaysOnTop    = Toggles.OHTop.Value
     bill.LightInfluence = 0
     bill.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     bill.Parent         = head
