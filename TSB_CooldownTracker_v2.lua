@@ -221,12 +221,8 @@ local function createBar(name)
 
     local barCorner = Instance.new("UICorner", frame)
 
-    -- BG gradient (top = slightly lighter, bottom = darker for depth)
-    local bgGrad = makeGradient(frame,
-        ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0)),
-        }), 90)
+    -- BG gradient
+    local bgGrad = makeGradient(frame, Color3.fromRGB(255,255,255), Color3.fromRGB(0,0,0), 90)
     bgGrad.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.88),
         NumberSequenceKeypoint.new(1, 0.65),
@@ -255,12 +251,8 @@ local function createBar(name)
 
     local fillCorner = Instance.new("UICorner", fill)
 
-    -- Fill gradient: bright top → slightly darker bottom
-    local fillGrad = makeGradient(fill,
-        ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0)),
-        }), 90)
+    -- Fill gradient
+    local fillGrad = makeGradient(fill, Color3.fromRGB(255,255,255), Color3.fromRGB(0,0,0), 90)
     fillGrad.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.55),
         NumberSequenceKeypoint.new(0.45, 0.75),
