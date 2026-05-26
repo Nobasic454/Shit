@@ -68,7 +68,7 @@ local Window = Library:CreateWindow({
     ShowCustomCursor = true,
 })
 
-Library:SetWatermark("TSB CD Tracker v2.0")
+pcall(function() Library:SetWatermark("TSB CD Tracker v2.0") end)
 
 local Tabs = {
     Main     = Window:AddTab("Bars",     "box"),
@@ -187,7 +187,7 @@ local FlashBox = Tabs.Effects:AddLeftGroupbox("Ready Flash")
 FlashBox:AddToggle("FlashOn",    { Text="Flash When Ready",     Default=true  })
 FlashBox:AddSlider("FlashCnt",   { Text="Flash Count",          Default=3,    Min=1, Max=8             })
 FlashBox:AddSlider("FlashSpd",   { Text="Flash Speed (s)",      Default=0.14, Min=0.04,Max=0.5,Rounding=2 })
-FlashBox:AddColorPicker("FlashClr", { Default=Color3.fromRGB(255, 255, 100) })
+FlashBox:AddLabel("Flash Color"):AddColorPicker("FlashClr", { Default=Color3.fromRGB(255, 255, 100) })
 
 -- ── Notifications ─────────────────────────────────────────────────────────────
 local NotifBox = Tabs.Effects:AddRightGroupbox("Notifications")
@@ -623,32 +623,31 @@ RunService.Heartbeat:Connect(function(dt)
             data.frame.BackgroundTransparency  = 1
         else
             data.container.Visible = false
-            goto continue_bar
         end
 
-        -- ── Number / READY text ──────────────────────────────────────────────
-        data.text.Font     = font
-        data.text.TextSize = textSize
+        -- ── Number / READY text (skip when hidden) ──────────────────────
+        if data.container.Visible then
+            data.text.Font     = font
+            data.text.TextSize = textSize
 
-        if showNums then
-            if isOnCd then
-                data.text.TextColor3 = numClr
-                if showPct then
-                    data.text.Text = string.format("%.0f%%", realRatio * 100)
+            if showNums then
+                if isOnCd then
+                    data.text.TextColor3 = numClr
+                    if showPct then
+                        data.text.Text = string.format("%.0f%%", realRatio * 100)
+                    else
+                        data.text.Text = string.format("%.1f", data.time)
+                    end
+                elseif showReady then
+                    data.text.Text       = "READY"
+                    data.text.TextColor3 = READY_C
                 else
-                    data.text.Text = string.format("%.1f", data.time)
+                    data.text.Text = ""
                 end
-            elseif showReady then
-                data.text.Text       = "READY"
-                data.text.TextColor3 = READY_C
             else
                 data.text.Text = ""
             end
-        else
-            data.text.Text = ""
         end
-
-        ::continue_bar::
     end
 end)
 
