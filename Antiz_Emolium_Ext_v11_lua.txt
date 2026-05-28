@@ -520,137 +520,6 @@ local PE_K = {
     AIR_Y_VEL        = 8,
 }
 
-local function _PE_trackVelocity(rawVel, dt)
-    local smooth = PE_K.VEL_SMOOTH
-    if PE.strafeCd > 0 then
-        local r = PE.strafeCd / PE_K.STRAFE_DUR
-        smooth  = smooth + (0.35 - smooth) * r * PE_K.STRAFE_REDUCE
-    end
-    smooth = math.clamp(smooth, 0.04, 1.0)
-    PE.prevRawVel  = PE.rawVel
-    PE.rawVel      = rawVel
-    PE.smoothedVel = PE.smoothedVel:Lerp(rawVel, smooth)
-end
-
-local function _PE_trackAccel(rawVel, dt)
-    local safeDt = math.max(dt, 1/240)
-    local raw    = (rawVel - PE.prevRawVel) / safeDt
-    if raw.Magnitude > PE_K.ACCEL_LIMIT then
-        raw = raw.Unit * PE_K.ACCEL_LIMIT
-    end
-    PE.accel = raw
-end
-
-local function _PE_detectStrafe(dt)
-    local spd = PE.smoothedVel.Magnitude
-    if spd > 3 then
-        local dir = PE.smoothedVel.Unit
-        if PE.prevDir.Magnitude > 0.1 then
-            local dot = dir:Dot(PE.prevDir)
-            if dot < PE_K.STRAFE_DOT then
-                PE.strafeCd = PE_K.STRAFE_DUR
-            end
-        end
-        PE.prevDir = dir
-    end
-    if PE.strafeCd > 0 then
-        PE.strafeCd = math.max(PE.strafeCd - dt, 0)
-    end
-end
-
-local function _PE_detectState(tgtChar)
-    if isRagdolled(tgtChar) then PE.state = "ragdoll"; return end
-    local spd  = PE.rawVel.Magnitude
-    local yVel = math.abs(PE.rawVel.Y)
-    if spd > PE_K.DASH_SPEED then PE.state = "dash"; return end
-    if yVel > PE_K.AIR_Y_VEL then PE.state = "airborne"; return end
-    PE.state = "grounded"
-end
-
-local function _PE_getPing()
-    local raw = getPing()
-    PE.pingSmoothed = PE.pingSmoothed * (1 - PE_K.PING_EMA)
-                    + raw              *      PE_K.PING_EMA
-    return math.clamp(PE.pingSmoothed * PE_K.PING_MULT, 0, PE_K.PING_MAX)
-end
-
-local function _PE_travelTime(distance, ping)
-    local projSpeed = math.max(Options.LeadSpeed.Value, 1)
-    local t = distance / projSpeed + ping
-    return math.max(t, 0)
-end
-
-local function _PE_solve(targetPos, myPos, distance, dt)
-    local vel   = PE.smoothedVel
-    local accel = PE.accel
-    local ping  = _PE_getPing()
-    local t     = _PE_travelTime(distance, ping)
-
-    local velMult, accelMult = 1.0, 1.0
-    if PE.state == "ragdoll" then
-        velMult   = 0.05
-        accelMult = 0.0
-    elseif PE.state == "airborne" then
-        accelMult = 0.25
-    elseif PE.state == "dash" then
-        velMult   = 1.15
-        accelMult = 0.10
-    end
-
-    if PE.strafeCd > 0 then
-        local r   = PE.strafeCd / PE_K.STRAFE_DUR
-        local red = r * PE_K.STRAFE_REDUCE
-        velMult   = velMult   * (1 - red)
-        accelMult = accelMult * (1 - red)
-    end
-
-    local movMult = 1.0
-    if movemePredActive then
-        local sel = Options.MovemePredAnims.Value or {}
-        for _, on in pairs(sel) do if on then movMult = Options.MovemePredMult.Value / 100; break end end
-    end
-
-    local strength = (Options.PredStrength.Value / 100) * movMult
-    local offset   = Vector3.zero
-
-    if Toggles.AccelPredEnable.Value then
-        offset = vel * t * velMult * strength
-                + 0.5 * accel * (t * t) * accelMult * strength
-    elseif Toggles.PredEnable.Value then
-        offset = vel * t * velMult * strength
-    end
-
-    local raw = Vector3.new(
-        targetPos.X + offset.X,
-        myPos.Y,
-        targetPos.Z + offset.Z
-    )
-
-    local outSmooth = PE_K.OUTPUT_SMOOTH
-    if PE.strafeCd > 0 then
-        outSmooth = outSmooth * (1 - PE.strafeCd / PE_K.STRAFE_DUR * 0.4)
-    end
-
-    if PE.lastPred then
-        raw = PE.lastPred:Lerp(raw, 1 - outSmooth)
-    end
-    PE.lastPred = raw
-
-    return raw
-end
-
-local function PE_reset()
-    PE.rawVel       = Vector3.zero
-    PE.smoothedVel  = Vector3.zero
-    PE.prevRawVel   = Vector3.zero
-    PE.accel        = Vector3.zero
-    PE.prevDir      = Vector3.zero
-    PE.strafeCd     = 0
-    PE.pingSmoothed = 0.05
-    PE.lastPred     = nil
-    PE.state        = "grounded"
-end
--- ────────────────────────────────────────────────────────────────
 local lastSnapTime       = 0
 
 local stepCurrentIdx     = 1
@@ -908,6 +777,139 @@ local function getPing()
     if ok and ms then return ms / 1000 end
     return 0.05
 end
+
+-- ── Prediction Engine v2.0 — функции (после isRagdolled + getPing) ──
+local function _PE_trackVelocity(rawVel, dt)
+    local smooth = PE_K.VEL_SMOOTH
+    if PE.strafeCd > 0 then
+        local r = PE.strafeCd / PE_K.STRAFE_DUR
+        smooth  = smooth + (0.35 - smooth) * r * PE_K.STRAFE_REDUCE
+    end
+    smooth = math.clamp(smooth, 0.04, 1.0)
+    PE.prevRawVel  = PE.rawVel
+    PE.rawVel      = rawVel
+    PE.smoothedVel = PE.smoothedVel:Lerp(rawVel, smooth)
+end
+
+local function _PE_trackAccel(rawVel, dt)
+    local safeDt = math.max(dt, 1/240)
+    local raw    = (rawVel - PE.prevRawVel) / safeDt
+    if raw.Magnitude > PE_K.ACCEL_LIMIT then
+        raw = raw.Unit * PE_K.ACCEL_LIMIT
+    end
+    PE.accel = raw
+end
+
+local function _PE_detectStrafe(dt)
+    local spd = PE.smoothedVel.Magnitude
+    if spd > 3 then
+        local dir = PE.smoothedVel.Unit
+        if PE.prevDir.Magnitude > 0.1 then
+            local dot = dir:Dot(PE.prevDir)
+            if dot < PE_K.STRAFE_DOT then
+                PE.strafeCd = PE_K.STRAFE_DUR
+            end
+        end
+        PE.prevDir = dir
+    end
+    if PE.strafeCd > 0 then
+        PE.strafeCd = math.max(PE.strafeCd - dt, 0)
+    end
+end
+
+local function _PE_detectState(tgtChar)
+    if isRagdolled(tgtChar) then PE.state = "ragdoll"; return end
+    local spd  = PE.rawVel.Magnitude
+    local yVel = math.abs(PE.rawVel.Y)
+    if spd > PE_K.DASH_SPEED then PE.state = "dash"; return end
+    if yVel > PE_K.AIR_Y_VEL then PE.state = "airborne"; return end
+    PE.state = "grounded"
+end
+
+local function _PE_getPing()
+    local raw = getPing()
+    PE.pingSmoothed = PE.pingSmoothed * (1 - PE_K.PING_EMA)
+                    + raw              *      PE_K.PING_EMA
+    return math.clamp(PE.pingSmoothed * PE_K.PING_MULT, 0, PE_K.PING_MAX)
+end
+
+local function _PE_travelTime(distance, ping)
+    local projSpeed = math.max(Options.LeadSpeed.Value, 1)
+    local t = distance / projSpeed + ping
+    return math.max(t, 0)
+end
+
+local function _PE_solve(targetPos, myPos, distance, dt)
+    local vel   = PE.smoothedVel
+    local accel = PE.accel
+    local ping  = _PE_getPing()
+    local t     = _PE_travelTime(distance, ping)
+
+    local velMult, accelMult = 1.0, 1.0
+    if PE.state == "ragdoll" then
+        velMult   = 0.05
+        accelMult = 0.0
+    elseif PE.state == "airborne" then
+        accelMult = 0.25
+    elseif PE.state == "dash" then
+        velMult   = 1.15
+        accelMult = 0.10
+    end
+
+    if PE.strafeCd > 0 then
+        local r   = PE.strafeCd / PE_K.STRAFE_DUR
+        local red = r * PE_K.STRAFE_REDUCE
+        velMult   = velMult   * (1 - red)
+        accelMult = accelMult * (1 - red)
+    end
+
+    local movMult = 1.0
+    if movemePredActive then
+        local sel = Options.MovemePredAnims.Value or {}
+        for _, on in pairs(sel) do if on then movMult = Options.MovemePredMult.Value / 100; break end end
+    end
+
+    local strength = (Options.PredStrength.Value / 100) * movMult
+    local offset   = Vector3.zero
+
+    if Toggles.AccelPredEnable.Value then
+        offset = vel * t * velMult * strength
+                + 0.5 * accel * (t * t) * accelMult * strength
+    elseif Toggles.PredEnable.Value then
+        offset = vel * t * velMult * strength
+    end
+
+    local raw = Vector3.new(
+        targetPos.X + offset.X,
+        myPos.Y,
+        targetPos.Z + offset.Z
+    )
+
+    local outSmooth = PE_K.OUTPUT_SMOOTH
+    if PE.strafeCd > 0 then
+        outSmooth = outSmooth * (1 - PE.strafeCd / PE_K.STRAFE_DUR * 0.4)
+    end
+
+    if PE.lastPred then
+        raw = PE.lastPred:Lerp(raw, 1 - outSmooth)
+    end
+    PE.lastPred = raw
+
+    return raw
+end
+
+local function PE_reset()
+    PE.rawVel       = Vector3.zero
+    PE.smoothedVel  = Vector3.zero
+    PE.prevRawVel   = Vector3.zero
+    PE.accel        = Vector3.zero
+    PE.prevDir      = Vector3.zero
+    PE.strafeCd     = 0
+    PE.pingSmoothed = 0.05
+    PE.lastPred     = nil
+    PE.state        = "grounded"
+end
+-- ────────────────────────────────────────────────────────────────
 
 local function getEventSignal(name)
     if name == "PreRender"      then return RunService.PreRender end
