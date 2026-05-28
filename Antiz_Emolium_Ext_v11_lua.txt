@@ -818,7 +818,6 @@ local function _PE_detectStrafe(dt)
 end
 
 local function _PE_detectState(tgtChar)
-    if isRagdolled(tgtChar) then PE.state = "ragdoll"; return end
     local spd  = PE.rawVel.Magnitude
     local yVel = math.abs(PE.rawVel.Y)
     if spd > PE_K.DASH_SPEED then PE.state = "dash"; return end
@@ -846,10 +845,7 @@ local function _PE_solve(targetPos, myPos, distance, dt)
     local t     = _PE_travelTime(distance, ping)
 
     local velMult, accelMult = 1.0, 1.0
-    if PE.state == "ragdoll" then
-        velMult   = 0.05
-        accelMult = 0.0
-    elseif PE.state == "airborne" then
+    if PE.state == "airborne" then
         accelMult = 0.25
     elseif PE.state == "dash" then
         velMult   = 1.15
@@ -1243,7 +1239,11 @@ local function updateAim()
     local tgtHum = lockedTarget.Character:FindFirstChildOfClass("Humanoid")
     if not tgtHum or tgtHum.Health <= 0 then stopLock(); return end
 
-    if isRagdolled(char) or isBlockedAnimationPlaying() then
+    if isRagdolled(char) then
+        stopLock(); return
+    end
+
+    if isBlockedAnimationPlaying() then
         hum.AutoRotate = true
         return
     end
