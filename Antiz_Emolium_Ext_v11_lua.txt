@@ -1284,15 +1284,19 @@ local function updateAim()
         targetPos = Vector3.new(visualPos.X, myPos.Y, visualPos.Z)
     end
 
+    local now = tick()
+    local dt  = now - lastFrameTime
+    lastFrameTime = now
+    if dt <= 0 then dt = 1/60 end
+
     -- ── Prediction Engine v2.0 [C] ──────────────────────────────
     local rawVel   = root.AssemblyLinearVelocity
     local distance = (HumanoidRootPart.Position - rootPos).Magnitude
 
-    -- Порядок вызовов строго фиксирован:
-    _PE_trackAccel(rawVel, dt)                          -- 1. accel (до смены rawVel)
-    _PE_trackVelocity(rawVel, dt)                       -- 2. velocity EMA
-    _PE_detectStrafe(dt)                                -- 3. strafe detection
-    _PE_detectState(lockedTarget.Character)             -- 4. movement state
+    _PE_trackAccel(rawVel, dt)
+    _PE_trackVelocity(rawVel, dt)
+    _PE_detectStrafe(dt)
+    _PE_detectState(lockedTarget.Character)
 
     local predicted = _PE_solve(targetPos, myPos, distance, dt)
 
@@ -1313,11 +1317,6 @@ local function updateAim()
     local speedMult  = Options.AimSpeed and (Options.AimSpeed.Value / 100) or 1
     local angleBoost = 1 + (angleDiff / 45) ^ 1.5
     local finalBlend = bound(baseSpeed * speedMult * angleBoost, 0, 1)
-
-    local now = tick()
-    local dt  = now - lastFrameTime
-    lastFrameTime = now
-    if dt <= 0 then dt = 1/60 end
 
     -- ========== INSTANT ==========
     if aimMode == "Instant" then
