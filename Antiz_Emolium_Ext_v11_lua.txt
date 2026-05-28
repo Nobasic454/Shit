@@ -1240,7 +1240,8 @@ local function updateAim()
     if not tgtHum or tgtHum.Health <= 0 then stopLock(); return end
 
     if isRagdolled(char) then
-        stopLock(); return
+        hum.AutoRotate = true
+        return
     end
 
     if isBlockedAnimationPlaying() then
