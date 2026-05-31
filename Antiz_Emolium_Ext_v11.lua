@@ -14,8 +14,8 @@ local function bound(v, lo, hi)
 end
 
 local Window = Library:CreateWindow({
-    Title = "Anti Emo",
-    Footer = "Version 1.2.0",
+    Title = "Antiz Emolium",
+    Footer = "Version 1.0.7",
     Icon = 100032358358540,
     ShowCustomCursor = true,
 })
@@ -39,7 +39,6 @@ local VelocityBox    = Tabs.Misc:AddRightGroupbox("Velocity")
 local TouchBox       = Tabs.Misc:AddRightGroupbox("Touch Destroy Moveme")
 local AnimNoCollBox  = Tabs.Misc:AddRightGroupbox("Anim Triggered No Collision")
 local VisualBox      = Tabs.Visuals:AddLeftGroupbox("Effects")
-local IgnoreBox      = Tabs.Visuals:AddRightGroupbox("Visual Ignore")
 local TrustBox       = Tabs.Trusting:AddLeftGroupbox("Part Trust")
 local AimEventsBox   = Tabs.Events:AddLeftGroupbox("Aim Lock Events")
 local GlobalEventsBox= Tabs.Events:AddRightGroupbox("Global Events")
@@ -49,41 +48,11 @@ SilentBox:AddLabel("Aim Lock Key"):AddKeyPicker("AimLockKey", {
     Default = "V", Mode = "Toggle", SyncToggleState = false, Text = "Aim Lock"
 })
 SilentBox:AddDropdown("TargetPart", {
-    Values = {"Pivot","Center Mass","Bounding Box","HumanoidRootPart","Head","Torso","Left Arm","Right Arm","Left Leg","Right Leg","Random Limb","Auto Limb","Nearest Part","Auto","Bone Priority"},
-
+    Values = {"HumanoidRootPart","Torso","Head","Right Arm","Left Arm","Right Leg","Left Leg","Hitbox_RightArm","Hitbox_LeftArm","Hitbox_RightLeg","Hitbox_LeftLeg"},
     Default = 1, Text = "Target Part"
 })
-SilentBox:AddLabel("— Bone Priority —")
-SilentBox:AddSlider("BonePriorityHead", {
-    Text = "Head", Default = 80, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("BonePriorityTorso", {
-    Text = "Torso", Default = 60, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("BonePriorityHRP", {
-    Text = "HumanoidRootPart", Default = 50, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("BonePriorityLeftArm", {
-    Text = "Left Arm", Default = 30, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("BonePriorityRightArm", {
-    Text = "Right Arm", Default = 1, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("BonePriorityLeftLeg", {
-    Text = "Left Leg", Default = 10, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("BonePriorityRightLeg", {
-    Text = "Right Leg", Default = 20, Min = 0, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
 SilentBox:AddDropdown("AimMode", {
-    Values = {"Instant", "Aggressive", "Lerp", "\194\176", "Snap", "Step", "Magnetic", "Adaptive", "Hybrid", "Linear", "Burst", "Velocity Aim", "Spiral"},
+    Values = {"Instant", "Aggressive", "Lerp", "\194\176", "Snap", "Step", "Magnetic", "Adaptive", "Hybrid"},
     Default = 1, Text = "Aim Mode"
 })
 SilentBox:AddSlider("AimBlendFactor", {
@@ -111,7 +80,7 @@ SilentBox:AddSlider("SnapSpeedDelay", {
     FormatDisplayValue = function(_, v) return v .. " s" end
 })
 SilentBox:AddSlider("HybridThreshold", {
-    Text = "Hybrid Snap Threshold", Default = 40, Min = 5, Max = 1000, Rounding = 0,
+    Text = "Hybrid Snap Threshold", Default = 40, Min = 5, Max = 150, Rounding = 0,
     FormatDisplayValue = function(_, v) return v .. " st/s" end
 })
 SilentBox:AddSlider("AdaptiveMinBlend", {
@@ -166,52 +135,16 @@ SilentBox:AddSlider("StepRepeatDelay", {
 SilentBox:AddDivider()
 SilentBox:AddLabel("— Magnetic Settings —")
 SilentBox:AddSlider("MagneticStrength", {
-    Text = "Magnetic Strength", Default = 92, Min = 1, Max = 100, Rounding = 0,
+    Text = "Magnetic Strength", Default = 80, Min = 1, Max = 100, Rounding = 0,
     FormatDisplayValue = function(_, v) return v .. "%" end
 })
-SilentBox:AddSlider("TargetHz", {
-    Text = "Target Hz (dt normalize)", Default = 120, Min = 1, Max = 240, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. " Hz" end
-})
-SilentBox:AddDivider()
-SilentBox:AddLabel("— Linear Settings —")
-SilentBox:AddSlider("LinearUpdatePerSecond", {
-    Text = "Update Per Second", Default = 20, Min = 1, Max = 240, Rounding = 0,
-    FormatDisplayValue = function(_, v) return tostring(v) end
-})
-SilentBox:AddSlider("LinearMaxAnglePerTurn", {
-    Text = "Max Angle Per Turn", Default = 180, Min = 1, Max = 360, Rounding = 0,
+SilentBox:AddSlider("MagneticRadius", {
+    Text = "Sticky Radius", Default = 25, Min = 1, Max = 180, Rounding = 0,
     FormatDisplayValue = function(_, v) return v .. "\194\176" end
 })
-SilentBox:AddDivider()
-SilentBox:AddLabel("— Burst Settings —")
-SilentBox:AddSlider("BurstUpdatePerSecond", {
-    Text = "Update Per Second", Default = 20, Min = 1, Max = 240, Rounding = 0,
-    FormatDisplayValue = function(_, v) return tostring(v) end
-})
-SilentBox:AddSlider("BurstStrength", {
-    Text = "Strength", Default = 77, Min = 1, Max = 100, Rounding = 0,
+SilentBox:AddSlider("MagneticDamping", {
+    Text = "Damping", Default = 30, Min = 0, Max = 100, Rounding = 0,
     FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddDivider()
-SilentBox:AddLabel("— Velocity Aim Settings —")
-SilentBox:AddSlider("VelocityAimStrength", {
-    Text = "Strength", Default = 85, Min = 1, Max = 100, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "%" end
-})
-SilentBox:AddSlider("VelocityAimScale", {
-    Text = "Speed Scale", Default = 30, Min = 1, Max = 200, Rounding = 0,
-    FormatDisplayValue = function(_, v) return tostring(v) end
-})
-SilentBox:AddDivider()
-SilentBox:AddLabel("— Spiral Settings —")
-SilentBox:AddSlider("SpiralFrequency", {
-    Text = "Frequency", Default = 20, Min = 1, Max = 240, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. " Hz" end
-})
-SilentBox:AddSlider("SpiralAmplitude", {
-    Text = "Amplitude", Default = 10, Min = 1, Max = 90, Rounding = 0,
-    FormatDisplayValue = function(_, v) return v .. "\194\176" end
 })
 SilentBox:AddDivider()
 SilentBox:AddLabel("— \194\176 (Degree) Settings —")
@@ -301,8 +234,8 @@ NoCollBox:AddToggle("IgnoreTarget", {Text = "Ignore Target", Default = false})
 
 NoCollPlusBox:AddToggle("NoCollPlus", {Text = "No Collision+", Default = false})
 NoCollPlusBox:AddDropdown("NoCollPlusParts", {
-    Values = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg","HumanoidRootPart"},
-    Default = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg"},
+    Values = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg","HumanoidRootPart","Hitbox_RightArm","Hitbox_LeftArm","Hitbox_RightLeg","Hitbox_LeftLeg"},
+    Default = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg","Hitbox_RightArm","Hitbox_LeftArm","Hitbox_RightLeg","Hitbox_LeftLeg"},
     Multi = true, Text = "Parts"
 })
 NoCollPlusBox:AddDropdown("NoCollPlusMode", {
@@ -378,13 +311,6 @@ VisualBox:AddToggle("WaterToggle", {Text = "Water Color", Default = false})
 VisualBox:AddToggle("HighlightToggle", {Text = "Highlight", Default = false})
     :AddColorPicker("HighlightColor", {Default = Color3.fromRGB(255, 0, 0)})
 
-IgnoreBox:AddToggle("AnimIgnoreEnable", {Text = "Ignore Animations", Default = true})
-IgnoreBox:AddDropdown("AnimIgnoreList", {
-    Values = {"Lethal", "Hunter's Grasp"},
-    Default = {"Lethal", "Hunter's Grasp"},
-    Multi = true, Text = "Ignored Animations"
-})
-
 TrustBox:AddToggle("TrustingEnabled", {Text = "Trusting", Default = true})
 TrustBox:AddSlider("TrustHRP",      {Text = "HumanoidRootPart", Default = 0.00, Min = 0, Max = 1, Rounding = 2})
 TrustBox:AddSlider("TrustHead",     {Text = "Head",             Default = 0.35, Min = 0, Max = 1, Rounding = 2})
@@ -394,33 +320,20 @@ TrustBox:AddSlider("TrustLeftArm",  {Text = "Left Arm",         Default = 0.30, 
 TrustBox:AddSlider("TrustRightLeg", {Text = "Right Leg",        Default = 0.30, Min = 0, Max = 1, Rounding = 2})
 TrustBox:AddSlider("TrustLeftLeg",  {Text = "Left Leg",         Default = 0.30, Min = 0, Max = 1, Rounding = 2})
 
--- BindToRenderStep: priority 0-2000, рендер-цикл
--- BindToSimulation: priority 0-2000, физика-цикл (PreSimulation + PostSimulation priority-sorted)
--- Misprediction:    срабатывает при обнаружении сетевой коррекции позиции (network reconciliation)
-local EVENT_NAMES = {
-    "PreRender","PreAnimation","PreSimulation","PostSimulation",
-    "RenderStepped","Stepped","Heartbeat",
-    "BindToRenderStep","BindToSimulation","Misprediction"
-}
+local EVENT_NAMES = {"PreRender","PreAnimation","PreSimulation","PostSimulation","RenderStepped","Stepped","Heartbeat","Bind"}
 
 AimEventsBox:AddDropdown("AimLockEvents", {
     Values = EVENT_NAMES, Default = {"Heartbeat"}, Multi = true, Text = "Aim Lock Events"
 })
 AimEventsBox:AddSlider("AimBindPriority", {
-    Text = "BindToRenderStep Priority", Default = 200, Min = 0, Max = 2000, Rounding = 0,
-})
-AimEventsBox:AddSlider("AimSimPriority", {
-    Text = "BindToSimulation Priority", Default = 200, Min = 0, Max = 2000, Rounding = 0,
+    Text = "Aim Bind Priority", Default = 200, Min = 0, Max = 2000, Rounding = 0,
 })
 
 GlobalEventsBox:AddDropdown("GlobalEvents", {
     Values = EVENT_NAMES, Default = {"Heartbeat"}, Multi = true, Text = "Global Events"
 })
 GlobalEventsBox:AddSlider("GlobalBindPriority", {
-    Text = "BindToRenderStep Priority", Default = 201, Min = 0, Max = 2000, Rounding = 0,
-})
-GlobalEventsBox:AddSlider("GlobalSimPriority", {
-    Text = "BindToSimulation Priority", Default = 201, Min = 0, Max = 2000, Rounding = 0,
+    Text = "Global Bind Priority", Default = 201, Min = 0, Max = 2000, Rounding = 0,
 })
 
 local BarsUIBox    = Tabs.Bars:AddLeftGroupbox("Bar Settings")
@@ -515,14 +428,6 @@ local stepState          = "apply"
 local stepTimer          = 0
 local lastFrameTime      = tick()
 
-local elasticVel         = 0
-local momentumVel        = 0
-local pidIntegral        = 0
-local pidLastError       = 0
-local linearLastTick     = 0
-local burstLastTick      = 0
-local spiralTime         = 0
-
 local velocityEnabled    = false
 local velocityArmed      = false
 local velocityExpire     = 0
@@ -548,7 +453,6 @@ local globalBindNames    = {}
 
 local activeConstraints  = {}
 local plusModified       = {}
-local plusHumConstraints = {}
 
 local function isAlive(p)
     if not p.Character then return false end
@@ -560,180 +464,9 @@ local function getRoot(p)
     return p.Character and p.Character:FindFirstChild("HumanoidRootPart")
 end
 
-local bonePriorityMap = {
-    ["Head"]             = "BonePriorityHead",
-    ["Torso"]            = "BonePriorityTorso",
-    ["HumanoidRootPart"] = "BonePriorityHRP",
-    ["Left Arm"]         = "BonePriorityLeftArm",
-    ["Right Arm"]        = "BonePriorityRightArm",
-    ["Left Leg"]         = "BonePriorityLeftLeg",
-    ["Right Leg"]        = "BonePriorityRightLeg",
-}
-local boneNames = {"Head","Torso","HumanoidRootPart","Left Arm","Right Arm","Left Leg","Right Leg"}
-
 local function getTargetPart(p)
     if not p.Character then return nil end
-    local char    = p.Character
-    local myPos   = HumanoidRootPart and HumanoidRootPart.Position or Vector3.zero
-    local mode    = Options.TargetPart.Value
-
-    -- Direct named parts
-    if mode == "HumanoidRootPart" then return char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Head"      then return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Torso"     then return char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Left Arm"  then return char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Right Arm" then return char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Left Leg"  then return char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Right Leg" then return char:FindFirstChild("Right Leg") or char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("HumanoidRootPart") end
-
-    -- Random Limb: случайная часть с ненулевым priority
-    if mode == "Random Limb" then
-        local pool = {}
-        for _, name in ipairs(boneNames) do
-            local opt = bonePriorityMap[name]
-            if opt and Options[opt].Value > 0 then
-                local part = char:FindFirstChild(name)
-                if part then table.insert(pool, part) end
-            end
-        end
-        if #pool > 0 then return pool[math.random(1, #pool)] end
-        return char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Auto Limb: выбирает часть с наибольшим priority
-    if mode == "Auto Limb" then
-        local best, bestVal = nil, -1
-        for _, name in ipairs(boneNames) do
-            local opt = bonePriorityMap[name]
-            if opt then
-                local val = Options[opt].Value
-                if val > bestVal then
-                    local part = char:FindFirstChild(name)
-                    if part then best = part; bestVal = val end
-                end
-            end
-        end
-        return best or char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Nearest Part: ближайшая BasePart к нам
-    if mode == "Nearest Part" then
-        local nearest, nearDist = nil, math.huge
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then
-                local d = (v.Position - myPos).Magnitude
-                if d < nearDist then nearest = v; nearDist = d end
-            end
-        end
-        return nearest or char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Pivot: использует PrimaryPart или HRP
-    if mode == "Pivot" then
-        return char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Center Mass: среднее положение всех BasePart → виртуальный Part не нужен, возвращаем HRP со смещением через fake
-    -- Реализуем через weightedPos в основном loop, здесь возвращаем HRP как anchor
-    if mode == "Center Mass" then
-        return char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Bounding Box: центр AABB всех частей
-    if mode == "Bounding Box" then
-        return char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Auto: взвешенный выбор по priority + proximity
-    if mode == "Auto" then
-        local bestScore, bestPart = -math.huge, nil
-        for _, name in ipairs(boneNames) do
-            local opt = bonePriorityMap[name]
-            if opt then
-                local priority = Options[opt].Value
-                local part = char:FindFirstChild(name)
-                if part and priority > 0 then
-                    local dist = (part.Position - myPos).Magnitude
-                    local proxBonus = math.max(0, 1 - dist / 50) * 20
-                    local score = priority + proxBonus
-                    if score > bestScore then bestScore = score; bestPart = part end
-                end
-            end
-        end
-        return bestPart or char:FindFirstChild("HumanoidRootPart")
-    end
-
-    -- Bone Priority: взвешенная позиция по слайдерам
-    if mode == "Bone Priority" then
-        local totalWeight, weightedPos = 0, Vector3.zero
-        for _, name in ipairs(boneNames) do
-            local opt = bonePriorityMap[name]
-            if opt then
-                local w = Options[opt].Value
-                if w > 0 then
-                    local part = char:FindFirstChild(name)
-                    if part then
-                        weightedPos = weightedPos + part.Position * w
-                        totalWeight = totalWeight + w
-                    end
-                end
-            end
-        end
-        if totalWeight > 0 then
-            -- возвращаем HRP как anchor, позиция считается в getTargetPos
-            return char:FindFirstChild("HumanoidRootPart")
-        end
-        return char:FindFirstChild("HumanoidRootPart")
-    end
-
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
-local function getTargetPos(p)
-    if not p.Character then return nil end
-    local char  = p.Character
-    local mode  = Options.TargetPart.Value
-
-    if mode == "Center Mass" then
-        local sum, count = Vector3.zero, 0
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then sum = sum + v.Position; count = count + 1 end
-        end
-        if count > 0 then return sum / count end
-    end
-
-    if mode == "Bounding Box" then
-        local minV = Vector3.new(math.huge, math.huge, math.huge)
-        local maxV = Vector3.new(-math.huge, -math.huge, -math.huge)
-        for _, v in ipairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then
-                minV = Vector3.new(math.min(minV.X, v.Position.X), math.min(minV.Y, v.Position.Y), math.min(minV.Z, v.Position.Z))
-                maxV = Vector3.new(math.max(maxV.X, v.Position.X), math.max(maxV.Y, v.Position.Y), math.max(maxV.Z, v.Position.Z))
-            end
-        end
-        if minV.X ~= math.huge then return (minV + maxV) / 2 end
-    end
-
-    if mode == "Bone Priority" then
-        local totalWeight, weightedPos = 0, Vector3.zero
-        for _, name in ipairs(boneNames) do
-            local opt = bonePriorityMap[name]
-            if opt then
-                local w = Options[opt].Value
-                if w > 0 then
-                    local part = char:FindFirstChild(name)
-                    if part then
-                        weightedPos = weightedPos + part.Position * w
-                        totalWeight = totalWeight + w
-                    end
-                end
-            end
-        end
-        if totalWeight > 0 then return weightedPos / totalWeight end
-    end
-
-    local part = getTargetPart(p)
-    return part and part.Position
+    return p.Character:FindFirstChild(Options.TargetPart.Value)
 end
 
 local function getDistance(a, b)
@@ -777,95 +510,15 @@ local function getEventSignal(name)
     return nil
 end
 
--- BindToSimulation: priority-based physics binding
--- реализован через sorted-таблицу коллбэков на PreSimulation
--- имитирует порядок приоритетов как BindToRenderStep, но в физика-цикле
-local simCallbacks = {}  -- { {priority, id, fn}, ... }
-local simConn = nil
-
-local function rebuildSimConn()
-    if simConn then pcall(function() simConn:Disconnect() end); simConn = nil end
-    if #simCallbacks == 0 then return end
-    table.sort(simCallbacks, function(a, b) return a[1] < b[1] end)
-    simConn = RunService.PreSimulation:Connect(function(dt)
-        for _, entry in ipairs(simCallbacks) do
-            pcall(entry[3], dt)
-        end
-    end)
-end
-
-local function addSimCallback(id, priority, fn)
-    table.insert(simCallbacks, {priority, id, fn})
-    rebuildSimConn()
-end
-
-local function removeSimCallback(id)
-    for i = #simCallbacks, 1, -1 do
-        if simCallbacks[i][2] == id then table.remove(simCallbacks, i) end
-    end
-    rebuildSimConn()
-end
-
--- Misprediction: детектим сетевую коррекцию позиции
--- срабатывает когда HRP смещается > порога без нашего ввода (сервер корректирует клиент)
-local mispredCallbacks = {}  -- { id = fn }
-local mispredConn = nil
-local mispredLastPos = nil
-local MISPRED_THRESHOLD = 0.5  -- studs
-
-local function rebuildMispredConn()
-    if mispredConn then pcall(function() mispredConn:Disconnect() end); mispredConn = nil end
-    if next(mispredCallbacks) == nil then mispredLastPos = nil; return end
-    mispredConn = RunService.PostSimulation:Connect(function(dt)
-        local char = LocalPlayer.Character
-        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then mispredLastPos = nil; return end
-        local pos = hrp.Position
-        if mispredLastPos then
-            local delta = (pos - mispredLastPos).Magnitude
-            -- скорость перемещения > ожидаемой → сервер скорректировал
-            local vel = hrp.AssemblyLinearVelocity.Magnitude
-            local expectedDelta = vel * dt + MISPRED_THRESHOLD
-            if delta > expectedDelta then
-                for _, fn in pairs(mispredCallbacks) do
-                    pcall(fn, dt)
-                end
-            end
-        end
-        mispredLastPos = pos
-    end)
-end
-
-local function addMispredCallback(id, fn)
-    mispredCallbacks[id] = fn
-    rebuildMispredConn()
-end
-
-local function removeMispredCallback(id)
-    mispredCallbacks[id] = nil
-    rebuildMispredConn()
-end
-
-local function bindMulti(selectedDict, callback, bindName, renderPriority, simPriority, connList, bindNameList)
+local function bindMulti(selectedDict, callback, bindName, priority, connList, bindNameList)
     for _, n in ipairs(EVENT_NAMES) do
         if selectedDict[n] then
-            if n == "BindToRenderStep" then
-                local id = bindName .. "_rend_" .. tostring(math.random(1, 1e9))
+            if n == "Bind" then
+                local id = bindName .. "_" .. tostring(priority) .. "_" .. tostring(math.random(1, 1e6))
                 local ok = pcall(function()
-                    RunService:BindToRenderStep(id, renderPriority, callback)
+                    RunService:BindToRenderStep(id, priority, callback)
                 end)
-                if ok then table.insert(bindNameList, "RENDER:" .. id) end
-
-            elseif n == "BindToSimulation" then
-                local id = bindName .. "_sim_" .. tostring(math.random(1, 1e9))
-                addSimCallback(id, simPriority, callback)
-                table.insert(bindNameList, "SIM:" .. id)
-
-            elseif n == "Misprediction" then
-                local id = bindName .. "_misp_" .. tostring(math.random(1, 1e9))
-                addMispredCallback(id, callback)
-                table.insert(bindNameList, "MISP:" .. id)
-
+                if ok then table.insert(bindNameList, id) end
             else
                 local sig = getEventSignal(n)
                 if sig then
@@ -882,18 +535,7 @@ local function unbindAll(connList, bindNameList)
     end
     for i = #connList, 1, -1 do connList[i] = nil end
     for _, name in pairs(bindNameList) do
-        if type(name) == "string" then
-            if name:sub(1, 7) == "RENDER:" then
-                pcall(function() RunService:UnbindFromRenderStep(name:sub(8)) end)
-            elseif name:sub(1, 4) == "SIM:" then
-                removeSimCallback(name:sub(5))
-            elseif name:sub(1, 5) == "MISP:" then
-                removeMispredCallback(name:sub(6))
-            else
-                -- legacy без префикса
-                pcall(function() RunService:UnbindFromRenderStep(name) end)
-            end
-        end
+        pcall(function() RunService:UnbindFromRenderStep(name) end)
     end
     for i = #bindNameList, 1, -1 do bindNameList[i] = nil end
 end
@@ -944,24 +586,17 @@ end
 
 local function restorePlus(p)
     local set = plusModified[p]
-    if set then
-        for part in pairs(set) do
-            if part and part.Parent then
-                pcall(function() part.CanCollide = true end)
-            end
+    if not set then return end
+    for part in pairs(set) do
+        if part and part.Parent then
+            pcall(function() part.CanCollide = true end)
         end
-        plusModified[p] = nil
     end
-    local cons = plusHumConstraints[p]
-    if cons then
-        for _, c in pairs(cons) do if c then pcall(function() c:Destroy() end) end end
-        plusHumConstraints[p] = nil
-    end
+    plusModified[p] = nil
 end
 
 local function clearAllPlus()
     for p in pairs(plusModified) do restorePlus(p) end
-    for p in pairs(plusHumConstraints) do restorePlus(p) end
 end
 
 local function updateHighlight()
@@ -983,29 +618,23 @@ Options.HighlightColor:OnChanged(function()
     end
 end)
 
-local animIgnoreMap = {
-    ["Lethal"]          = "rbxassetid://12296113986",
-    ["Hunter's Grasp"]  = "rbxassetid://12309835105",
+local blockedAnimations = {
+    ["rbxassetid://12296113986"] = true,
+    ["rbxassetid://12309835105"] = true,
 }
 
 local function isBlockedAnimationPlaying()
-    if not Toggles.AnimIgnoreEnable.Value then return false end
     local char = LocalPlayer.Character
     if not char then return false end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return false end
     local animator = hum:FindFirstChildOfClass("Animator")
     if not animator then return false end
-    local selected = Options.AnimIgnoreList.Value or {}
-    local active = {}
-    for name, on in pairs(selected) do
-        if on then active[animIgnoreMap[name]] = true end
-    end
     for _, track in pairs(animator:GetPlayingAnimationTracks()) do
         local anim = track.Animation
         if anim then
             local id = anim.AnimationId:match("%d+")
-            if id and active["rbxassetid://"..id] then return true end
+            if id and blockedAnimations["rbxassetid://"..id] then return true end
         end
     end
     return false
@@ -1147,13 +776,6 @@ local function stopLock()
     stepCurrentIdx = 1
     stepState      = "apply"
     stepTimer      = 0
-    elasticVel     = 0
-    momentumVel    = 0
-    pidIntegral    = 0
-    pidLastError   = 0
-    linearLastTick = 0
-    burstLastTick  = 0
-    spiralTime     = 0
     if highlightObj then highlightObj:Destroy(); highlightObj = nil end
     local char = LocalPlayer.Character
     if char then
@@ -1201,21 +823,15 @@ local function updateAim()
 
     hum.AutoRotate = false
 
-    local myPos   = HumanoidRootPart.Position
-    local rootPos = root.Position
+    local myPos     = HumanoidRootPart.Position
+    local rootPos   = root.Position
+    local visualPos = visual.Position
 
-    local function applyRotation(newCFrame)
-        HumanoidRootPart.CFrame = newCFrame
-    end
-
-    local partName    = Options.TargetPart.Value
-    local isLimb      = partName:find("Arm") or partName:find("Leg")
-    local resolvedPos = getTargetPos(lockedTarget) or visual.Position
-    local visualPos   = resolvedPos
+    local partName = Options.TargetPart.Value
+    local isLimb   = partName:find("Arm") or partName:find("Leg")
 
     local targetPos
     if Toggles.TrustingEnabled.Value then
-        -- универсальный trust blend: rootPos → resolvedPos
         local trustMap = {
             ["HumanoidRootPart"] = Options.TrustHRP.Value,
             ["Head"]      = Options.TrustHead.Value,
@@ -1242,6 +858,7 @@ local function updateAim()
     local distance = (HumanoidRootPart.Position - rootPos).Magnitude
 
     local velForPred = vel
+    if speed > 40 then velForPred = vel * 0.55 end
 
     if isLimb then
         velForPred = velForPred:Lerp(lastVel, 0.35) * 0.80
@@ -1284,6 +901,7 @@ local function updateAim()
         local speedBoost = 1 + bound(speed / 25, 0, 4) * mult
         local midVel     = velForPred + 0.5 * accel * tAggr
         local aggrOffset = midVel * tAggr * speedBoost + accel * (tAggr ^ 2 * 0.6) * mult
+        if speed > 45 then aggrOffset = velForPred.Unit * (speed * 0.3) * mult end
         local maxOffset  = (15 + distance * 0.1) * math.max(mult, 0.1)
         if aggrOffset.Magnitude > maxOffset then aggrOffset = aggrOffset.Unit * maxOffset end
         local aggrPred = Vector3.new(targetPos.X + aggrOffset.X, myPos.Y, targetPos.Z + aggrOffset.Z)
@@ -1293,6 +911,7 @@ local function updateAim()
         local mult       = (Options.AggrStrength.Value / 100) * movMult * aggrPredMul
         local speedBoost = 1 + bound(speed / 25, 0, 4) * mult
         local aggrOffset = velForPred * tAggr * speedBoost
+        if speed > 60 then aggrOffset = velForPred.Unit * (speed * 0.3) * mult end
         local maxOffset  = (15 + distance * 0.1) * math.max(mult, 0.1)
         if aggrOffset.Magnitude > maxOffset then aggrOffset = aggrOffset.Unit * maxOffset end
         local aggrPred = Vector3.new(targetPos.X + aggrOffset.X, myPos.Y, targetPos.Z + aggrOffset.Z)
@@ -1322,22 +941,23 @@ local function updateAim()
     local dt  = now - lastFrameTime
     lastFrameTime = now
     if dt <= 0 then dt = 1/60 end
+    if dt > 0.1 then dt = 0.1 end
 
     -- ========== INSTANT ==========
     if aimMode == "Instant" then
-        applyRotation(targetCFrame)
+        HumanoidRootPart.CFrame = targetCFrame
 
     -- ========== AGGRESSIVE ==========
     elseif aimMode == "Aggressive" then
         local aggrMult  = Options.AggressiveMultiplier and Options.AggressiveMultiplier.Value or 1
         local aggrBlend = bound(finalBlend * (1.5 + aggrMult), 0.85, 1)
-        applyRotation(currentCFrame:Lerp(targetCFrame, aggrBlend))
+        HumanoidRootPart.CFrame = currentCFrame:Lerp(targetCFrame, aggrBlend)
 
     -- ========== LERP ==========
     elseif aimMode == "Lerp" then
         local lerpMult   = Options.LerpMultiplier and Options.LerpMultiplier.Value or 1.0
         local smartBlend = bound(finalBlend ^ 0.75 * 1.2 * lerpMult, 0, 1.0)
-        applyRotation(currentCFrame:Lerp(targetCFrame, smartBlend))
+        HumanoidRootPart.CFrame = currentCFrame:Lerp(targetCFrame, smartBlend)
 
     -- ========== ° (Degree turn-speed rotation) ==========
     elseif aimMode == "\194\176" then
@@ -1352,9 +972,9 @@ local function updateAim()
         local maxStep = math.rad(turnSpd) * dt
         local tgtCF   = CFrame.lookAt(myPos, myPos + targetDir)
         if angleD <= maxStep then
-            applyRotation(tgtCF)
+            HumanoidRootPart.CFrame = tgtCF
         else
-            applyRotation(HumanoidRootPart.CFrame:Lerp(tgtCF, maxStep / angleD))
+            HumanoidRootPart.CFrame = HumanoidRootPart.CFrame:Lerp(tgtCF, maxStep / angleD)
         end
 
     -- ========== SNAP ==========
@@ -1366,14 +986,14 @@ local function updateAim()
             lastSnapTime = now
             if angleDiff <= snapThreshold then
                 -- в пределах threshold — снапим сразу на цель
-                applyRotation(targetCFrame)
+                HumanoidRootPart.CFrame = targetCFrame
             else
                 -- поворачиваем ровно на snapThreshold° в направлении цели
                 local rawDir = predicted - myPos
                 if rawDir.Magnitude >= 0.01 then
                     local tgtCF = CFrame.lookAt(myPos, myPos + rawDir.Unit)
                     local t     = math.rad(snapThreshold) / math.rad(angleDiff)
-                    applyRotation(currentCFrame:Lerp(tgtCF, t))
+                    HumanoidRootPart.CFrame = currentCFrame:Lerp(tgtCF, t)
                 end
             end
         end
@@ -1438,11 +1058,11 @@ local function updateAim()
                 end
 
                 if canReach then
-                    applyRotation(CFrame.lookAt(myPos, myPos + toTgt))
+                    HumanoidRootPart.CFrame = CFrame.lookAt(myPos, myPos + toTgt)
                 else
                     local rotAngle = -math.rad(threshold)
                     local newDir   = CFrame.Angles(0, rotAngle, 0):VectorToWorldSpace(flatFwd)
-                    applyRotation(CFrame.lookAt(myPos, myPos + Vector3.new(newDir.X, 0, newDir.Z)))
+                    HumanoidRootPart.CFrame = CFrame.lookAt(myPos, myPos + Vector3.new(newDir.X, 0, newDir.Z))
                 end
             end
 
@@ -1452,12 +1072,40 @@ local function updateAim()
 
     -- ========== MAGNETIC ==========
     elseif aimMode == "Magnetic" then
-        local strength  = Options.MagneticStrength.Value / 100
-        local dtFactor  = bound(dt * Options.TargetHz.Value, 0.1, 4)
-        local expPull   = (math.exp(strength * 4.0) - 1) / (math.exp(4.0) - 1)
-        local distBoost = 1 + bound(1 - distance / 50, 0, 1.0)
-        local blend     = bound(expPull * distBoost * dtFactor, 0.005, 1)
-        applyRotation(currentCFrame:Lerp(targetCFrame, blend))
+        local strength = Options.MagneticStrength.Value / 100
+        local radius   = Options.MagneticRadius.Value
+        local damping  = Options.MagneticDamping.Value / 100
+
+        -- Sticky zone: exponential attraction inside radius, smooth falloff outside
+        local magneticPull
+        if angleDiff <= radius then
+            local proximity = 1 - (angleDiff / math.max(radius, 0.01))
+            -- Exponential curve gives very strong pull near center, gradual at edge
+            local expPull = (math.exp(proximity * 2.5) - 1) / (math.exp(2.5) - 1)
+            magneticPull = strength * expPull
+        else
+            -- Smooth inverse-square falloff outside sticky radius
+            local ratio = radius / math.max(angleDiff, 0.01)
+            magneticPull = strength * (ratio ^ 2) * 0.5
+        end
+
+        -- Velocity damping: reduce pull when target moves fast to prevent overshooting
+        local velFactor = bound(speed / 60, 0, 1)
+        local velDamp = 1 - damping * velFactor * 0.6
+
+        -- Angular damping: slight reduction for large angle gaps
+        local angleFactor = bound(angleDiff / 180, 0, 1)
+        local angleDamp = 1 - damping * 0.25 * angleFactor
+
+        -- Distance-based boost: pull harder when close to target
+        local distBoost = 1 + bound(1 - distance / 50, 0, 0.5)
+
+        local dampedPull = magneticPull * velDamp * angleDamp * distBoost
+
+        -- Apply dt-scaled smoothing for frame-rate independence
+        local dtFactor = bound(dt * 60, 0.5, 2)
+        local magneticBlend = bound(dampedPull * dtFactor, 0.005, 1)
+        HumanoidRootPart.CFrame = currentCFrame:Lerp(targetCFrame, magneticBlend)
 
     -- ========== ADAPTIVE ==========
     elseif aimMode == "Adaptive" then
@@ -1468,68 +1116,15 @@ local function updateAim()
         local angleFactor = bound(angleDiff / 90, 0, 1)
         local raw = (distFactor * 0.3 + speedFactor * 0.4 + angleFactor * 0.3) * speedMult
         local adaptiveBlend = bound(minB + raw * (maxB - minB), minB, maxB)
-        applyRotation(currentCFrame:Lerp(targetCFrame, adaptiveBlend))
+        HumanoidRootPart.CFrame = currentCFrame:Lerp(targetCFrame, adaptiveBlend)
 
     -- ========== HYBRID ==========
     elseif aimMode == "Hybrid" then
         if speed >= Options.HybridThreshold.Value or angleDiff > 30 then
-            applyRotation(targetCFrame)
+            HumanoidRootPart.CFrame = targetCFrame
         else
             local hybridBlend = bound(finalBlend * 1.5, 0.5, 1)
-            applyRotation(currentCFrame:Lerp(targetCFrame, hybridBlend))
-        end
-
-    -- ========== LINEAR ==========
-    elseif aimMode == "Linear" then
-        local ups      = Options.LinearUpdatePerSecond.Value
-        local maxAngle = Options.LinearMaxAnglePerTurn.Value
-        if now - linearLastTick >= 1 / ups then
-            linearLastTick = now
-            local rawDir = predicted - myPos
-            if rawDir.Magnitude >= 0.01 then
-                local tgtCF = CFrame.lookAt(myPos, myPos + rawDir.Unit)
-                if angleDiff <= maxAngle then
-                    applyRotation(tgtCF)
-                else
-                    local t = math.rad(maxAngle) / math.rad(angleDiff)
-                    applyRotation(currentCFrame:Lerp(tgtCF, t))
-                end
-            end
-        end
-
-    -- ========== BURST ==========
-    elseif aimMode == "Burst" then
-        local ups      = Options.BurstUpdatePerSecond.Value
-        local strength = Options.BurstStrength.Value / 100
-        if now - burstLastTick >= 1 / ups then
-            burstLastTick = now
-            applyRotation(currentCFrame:Lerp(targetCFrame, strength))
-        end
-
-    -- ========== VELOCITY AIM ==========
-    elseif aimMode == "Velocity Aim" then
-        local base     = Options.VelocityAimStrength.Value / 100
-        local scale    = Options.VelocityAimScale.Value
-        local velScale = bound(speed / scale, 0.1, 5)
-        local blend    = bound(base * velScale, 0.01, 1)
-        applyRotation(currentCFrame:Lerp(targetCFrame, blend))
-
-    -- ========== SPIRAL ==========
-    elseif aimMode == "Spiral" then
-        local freq = Options.SpiralFrequency.Value
-        local amp  = math.rad(Options.SpiralAmplitude.Value)
-        spiralTime = spiralTime + dt
-        local rawDir = predicted - myPos
-        if rawDir.Magnitude >= 0.01 then
-            local baseDir = rawDir.Unit
-            local perp    = Vector3.new(-baseDir.Z, 0, baseDir.X)
-            local wobble  = math.sin(spiralTime * freq) * amp
-            local spiralDir = (baseDir + perp * wobble)
-            if spiralDir.Magnitude >= 0.01 then
-                spiralDir = spiralDir.Unit
-                local tgtCF = CFrame.lookAt(myPos, myPos + Vector3.new(spiralDir.X, 0, spiralDir.Z))
-                applyRotation(currentCFrame:Lerp(tgtCF, bound(finalBlend, 0.05, 1)))
-            end
+            HumanoidRootPart.CFrame = currentCFrame:Lerp(targetCFrame, hybridBlend)
         end
     end
 end
@@ -1573,7 +1168,7 @@ local function startLock()
     local hasAny = false
     for _, v in pairs(sel) do if v then hasAny = true break end end
     if not hasAny then sel = {Heartbeat = true} end
-    bindMulti(sel, updateAim, "AimLockBind", Options.AimBindPriority.Value, Options.AimSimPriority.Value, aimLockConns, aimBindNames)
+    bindMulti(sel, updateAim, "AimLockBind", Options.AimBindPriority.Value, aimLockConns, aimBindNames)
 end
 
 Options.AimLockKey:OnClick(function()
@@ -1585,7 +1180,7 @@ local function rebindAim()
     if silentActive then
         unbindAll(aimLockConns, aimBindNames)
         local sel = Options.AimLockEvents.Value or {}
-        bindMulti(sel, updateAim, "AimLockBind", Options.AimBindPriority.Value, Options.AimSimPriority.Value, aimLockConns, aimBindNames)
+        bindMulti(sel, updateAim, "AimLockBind", Options.AimBindPriority.Value, aimLockConns, aimBindNames)
     end
 end
 Options.AimLockEvents:OnChanged(rebindAim)
@@ -1753,8 +1348,6 @@ local function noCollisionTick()
     end
 end
 
-local dashBarsTick = nil
-
 local function globalTick(dt)
     -- Velocity anim detection (runs in global event, не хардкод Heartbeat)
     if animLoopActive and Toggles.VelocityModify.Value and Options.VelocityMode.Value == "Animation" then
@@ -1774,7 +1367,7 @@ end
 local function rebindGlobal()
     unbindAll(globalConns, globalBindNames)
     local sel = Options.GlobalEvents.Value or {}
-    bindMulti(sel, globalTick, "GlobalBind", Options.GlobalBindPriority.Value, Options.GlobalSimPriority.Value, globalConns, globalBindNames)
+    bindMulti(sel, globalTick, "GlobalBind", Options.GlobalBindPriority.Value, globalConns, globalBindNames)
 end
 rebindGlobal()
 Options.GlobalEvents:OnChanged(rebindGlobal)
@@ -1855,6 +1448,8 @@ SaveManager:SetFolder("TSBUtility/tsb")
 SaveManager:BuildConfigSection(Tabs["UI Settings"])
 ThemeManager:ApplyToTab(Tabs["UI Settings"])
 SaveManager:LoadAutoloadConfig()
+
+local dashBarsTick = nil
 
 do
     local Workspace   = game:GetService("Workspace")
