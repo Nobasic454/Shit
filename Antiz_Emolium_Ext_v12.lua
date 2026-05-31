@@ -49,7 +49,7 @@ SilentBox:AddLabel("Aim Lock Key"):AddKeyPicker("AimLockKey", {
     Default = "V", Mode = "Toggle", SyncToggleState = false, Text = "Aim Lock"
 })
 SilentBox:AddDropdown("TargetPart", {
-    Values = {"Pivot","Center Mass","Bounding Box","HumanoidRootPart","Head","Torso","Left Arm","Right Arm","Left Leg","Right Leg","Hitbox_RightArm","Hitbox_LeftArm","Hitbox_RightLeg","Hitbox_LeftLeg","Random Limb","Auto Limb","Nearest Part","Auto","Bone Priority"},
+    Values = {"Pivot","Center Mass","Bounding Box","HumanoidRootPart","Head","Torso","Left Arm","Right Arm","Left Leg","Right Leg","Random Limb","Auto Limb","Nearest Part","Auto","Bone Priority"},
 
     Default = 1, Text = "Target Part"
 })
@@ -301,7 +301,7 @@ NoCollBox:AddToggle("IgnoreTarget", {Text = "Ignore Target", Default = false})
 
 NoCollPlusBox:AddToggle("NoCollPlus", {Text = "No Collision+", Default = false})
 NoCollPlusBox:AddDropdown("NoCollPlusParts", {
-    Values = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg","HumanoidRootPart","Hitbox_RightArm","Hitbox_LeftArm","Hitbox_RightLeg","Hitbox_LeftLeg"},
+    Values = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg","HumanoidRootPart"},
     Default = {"Head","Torso","Right Arm","Left Arm","Right Leg","Left Leg"},
     Multi = true, Text = "Parts"
 })
@@ -585,10 +585,6 @@ local function getTargetPart(p)
     if mode == "Right Arm" then return char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm") or char:FindFirstChild("HumanoidRootPart") end
     if mode == "Left Leg"  then return char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("HumanoidRootPart") end
     if mode == "Right Leg" then return char:FindFirstChild("Right Leg") or char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Hitbox_RightArm" then return char:FindFirstChild("Hitbox_RightArm") or char:FindFirstChild("Right Arm") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Hitbox_LeftArm"  then return char:FindFirstChild("Hitbox_LeftArm")  or char:FindFirstChild("Left Arm")  or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Hitbox_RightLeg" then return char:FindFirstChild("Hitbox_RightLeg") or char:FindFirstChild("Right Leg") or char:FindFirstChild("HumanoidRootPart") end
-    if mode == "Hitbox_LeftLeg"  then return char:FindFirstChild("Hitbox_LeftLeg")  or char:FindFirstChild("Left Leg")  or char:FindFirstChild("HumanoidRootPart") end
 
     -- Random Limb: случайная часть с ненулевым priority
     if mode == "Random Limb" then
@@ -1163,6 +1159,10 @@ local function stopLock()
     if char then
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then hum.AutoRotate = true end
+        task.defer(function()
+            local h = char:FindFirstChildOfClass("Humanoid")
+            if h then h.AutoRotate = true end
+        end)
     end
 end
 
@@ -1834,6 +1834,12 @@ local function onCharacterAdded(char)
     movemePredPending = false
     movemePredActive  = false
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart", 5)
+    -- гарантированно восстанавливаем AutoRotate на новом чаре
+    -- task.defer ждёт после всех уже зашедших в очередь тиков (updateAim etc.)
+    task.defer(function()
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.AutoRotate = true end
+    end)
     char.DescendantAdded:Connect(modifyBodyVelocity)
     if Options.VelocityMode.Value == "Animation" then startAnimLoop() end
     if Toggles.WaterToggle.Value then task.wait(0.5); setupWater(char) end
