@@ -1,0 +1,779 @@
+-- ════════════════════════════════════════════════════════
+--  SnowButtons v10 · AIM ONLY
+--  Запускать ПОСЛЕ Antiz_Emolium_Ext.lua
+--  V = AimLock ближайший к касанию
+--  Drag: держи 444 мс → fill из центра → тащи куда угодно
+--  v10: убраны aurora/glow/стекло/линии, снег мельче,
+--       фон кнопки непрозрачный тёмно-синий, снег падает на фон
+-- ════════════════════════════════════════════════════════
+
+local Players  = game:GetService("Players")
+local Camera   = workspace.CurrentCamera
+local UIS      = game:GetService("UserInputService")
+local TweenSvc = game:GetService("TweenService")
+local LP       = Players.LocalPlayer
+
+local t0 = tick()
+while not _G.AntiEmoAPI and (tick() - t0) < 25 do task.wait(0.1) end
+if not _G.AntiEmoAPI then
+    warn("[SnowButtons v10] _G.AntiEmoAPI не найден — сначала запусти главный скрипт")
+    return
+end
+local API = _G.AntiEmoAPI
+
+-- ═══════════════════════════════════════════════════════════════
+--  ПАЛИТРА
+-- ═══════════════════════════════════════════════════════════════
+local ICE = {
+    VOID         = Color3.fromRGB(  2,   4,  14),
+    ABYSS        = Color3.fromRGB(  5,   9,  28),
+    DEEP         = Color3.fromRGB( 10,  22,  58),
+    MID          = Color3.fromRGB( 22,  58, 128),
+    PURE         = Color3.fromRGB( 80, 168, 238),
+    FROST        = Color3.fromRGB(158, 218, 255),
+    FLAKE        = Color3.fromRGB(200, 234, 255),
+    WHITE        = Color3.fromRGB(230, 245, 255),
+    CRYSTAL      = Color3.fromRGB(215, 242, 255),
+    MINT_HOT     = Color3.fromRGB(  0, 255, 178),
+    MINT_MID     = Color3.fromRGB(  0, 190, 130),
+    MINT_DEEP    = Color3.fromRGB(  0,  70,  55),
+    MINT_ABYSS   = Color3.fromRGB(  0,  22,  18),
+    DRAG_READY   = Color3.fromRGB(120, 225, 255),
+    DRAG_GLOW    = Color3.fromRGB( 80, 200, 255),
+    TEXT         = Color3.fromRGB(210, 234, 255),
+    TEXT_DIM     = Color3.fromRGB(120, 168, 210),
+    TEXT_WHITE   = Color3.new(1, 1, 1),
+    STROKE_IDLE  = Color3.fromRGB( 68, 138, 218),
+    STROKE_AIM   = Color3.fromRGB(  0, 238, 198),
+    STROKE_DRAG  = Color3.fromRGB(100, 210, 255),
+}
+
+-- ═══════════════════════════════════════════════════════════════
+--  TWEEN ШАБЛОНЫ
+-- ═══════════════════════════════════════════════════════════════
+local TW = {
+    SNAP    = TweenInfo.new(0.08, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    FAST    = TweenInfo.new(0.16, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    MED     = TweenInfo.new(0.30, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    BOUNCE  = TweenInfo.new(0.45, Enum.EasingStyle.Back,    Enum.EasingDirection.Out),
+    SPRING  = TweenInfo.new(0.55, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+    PULSE   = TweenInfo.new(0.75, Enum.EasingStyle.Sine,    Enum.EasingDirection.InOut),
+    RISE    = TweenInfo.new(0.50, Enum.EasingStyle.Back,    Enum.EasingDirection.Out),
+    BLOOM   = TweenInfo.new(0.22, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    WOBBLE  = TweenInfo.new(0.10, Enum.EasingStyle.Sine,    Enum.EasingDirection.InOut),
+}
+
+-- ═══════════════════════════════════════════════════════════════
+--  ВСПОМОГАТЕЛЬНЫЕ
+-- ═══════════════════════════════════════════════════════════════
+local function rnd(a, b)      return a + math.random() * (b - a) end
+local function lerp(a, b, t)  return a + (b - a) * t             end
+local function clamp(v,mn,mx) return math.max(mn, math.min(mx, v)) end
+local function tw(obj, info, props) TweenSvc:Create(obj, info, props):Play() end
+local function delay(t, fn)   task.delay(t, fn) end
+
+local function newCorner(parent, r)
+    local c = Instance.new("UICorner", parent)
+    c.CornerRadius = UDim.new(0, r)
+    return c
+end
+local function newStroke(parent, thick, col, trans)
+    local s = Instance.new("UIStroke", parent)
+    s.Thickness    = thick or 2
+    s.Color        = col   or ICE.STROKE_IDLE
+    s.Transparency = trans or 0
+    return s
+end
+local function newGrad(parent, c1, c2, rot)
+    local g = Instance.new("UIGradient", parent)
+    g.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, c1),
+        ColorSequenceKeypoint.new(1, c2),
+    }
+    g.Rotation = rot or 90
+    return g
+end
+local function newGrad3(parent, c1, c2, c3, rot)
+    local g = Instance.new("UIGradient", parent)
+    g.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0,   c1),
+        ColorSequenceKeypoint.new(0.5, c2),
+        ColorSequenceKeypoint.new(1,   c3),
+    }
+    g.Rotation = rot or 90
+    return g
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  SCREENGUI
+-- ═══════════════════════════════════════════════════════════════
+local gui = Instance.new("ScreenGui")
+gui.Name            = "AntiEmoMobileButtons"
+gui.Parent          = (gethui and gethui()) or game:GetService("CoreGui")
+gui.ResetOnSpawn    = false
+gui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+gui.IgnoreGuiInset  = true
+gui.DisplayOrder    = 999
+
+-- ═══════════════════════════════════════════════════════════════
+--  КОНСТАНТЫ
+-- ═══════════════════════════════════════════════════════════════
+local CORNER_RADIUS  = 5
+local BTN_W, BTN_H   = 78, 50
+local DRAG_THRESHOLD = 0.444   -- 444 мс → разблокировать drag
+
+-- ═══════════════════════════════════════════════════════════════
+--  ФАБРИКА КНОПКИ
+-- ═══════════════════════════════════════════════════════════════
+local function buildSnowButton(cfg)
+
+    -- Корневой контейнер (непрозрачный тёмно-синий фон)
+    local root = Instance.new("Frame")
+    root.Name                   = "BtnRoot"
+    root.Parent                 = gui
+    root.Size                   = UDim2.new(0, BTN_W, 0, BTN_H)
+    root.Position               = UDim2.new(cfg.px, 0, cfg.py, 0)
+    root.BackgroundColor3       = ICE.ABYSS
+    root.BackgroundTransparency = 0          -- SOLID — без стекла
+    root.BorderSizePixel        = 0
+    root.ZIndex                 = 10
+    root.ClipsDescendants       = true
+    newCorner(root, CORNER_RADIUS)
+
+    local rootGrad = newGrad(root,
+        Color3.fromRGB(14, 32, 72),
+        Color3.fromRGB( 3,  6, 20),
+        130
+    )
+    local rootStroke = newStroke(root, 1.6, cfg.strokeIdle, 0)
+
+    -- Drag ring (обводка готовности к перетаскиванию)
+    local dragRing = Instance.new("Frame")
+    dragRing.Name                   = "DragRing"
+    dragRing.Parent                 = root
+    dragRing.Size                   = UDim2.new(1, 4, 1, 4)
+    dragRing.Position               = UDim2.new(0, -2, 0, -2)
+    dragRing.BackgroundTransparency = 1.0
+    dragRing.BorderSizePixel        = 0
+    dragRing.ZIndex                 = 13
+    local dragRingStroke = newStroke(dragRing, 2.8, ICE.DRAG_READY, 1.0)
+    newCorner(dragRing, CORNER_RADIUS + 2)
+
+    -- Drag fill (из центра за 444 мс)
+    local dragProgressBG = Instance.new("Frame")
+    dragProgressBG.Parent                 = root
+    dragProgressBG.Size                   = UDim2.new(1, 0, 1, 0)
+    dragProgressBG.Position               = UDim2.new(0, 0, 0, 0)
+    dragProgressBG.BackgroundTransparency = 1.0
+    dragProgressBG.BorderSizePixel        = 0
+    dragProgressBG.ZIndex                 = 20
+    dragProgressBG.ClipsDescendants       = true
+    newCorner(dragProgressBG, CORNER_RADIUS)
+
+    local dragProgressFill = Instance.new("Frame")
+    dragProgressFill.Parent                 = dragProgressBG
+    dragProgressFill.Size                   = UDim2.new(0, 0, 0, 0)
+    dragProgressFill.Position               = UDim2.new(0.5, 0, 0.5, 0)
+    dragProgressFill.AnchorPoint            = Vector2.new(0.5, 0.5)
+    dragProgressFill.BackgroundColor3       = ICE.DRAG_READY
+    dragProgressFill.BackgroundTransparency = 0.52
+    dragProgressFill.BorderSizePixel        = 0
+    dragProgressFill.ZIndex                 = 21
+    newCorner(dragProgressFill, CORNER_RADIUS)
+    newGrad3(dragProgressFill, ICE.DRAG_GLOW, ICE.WHITE, ICE.DRAG_GLOW, 45)
+
+    -- Drag hint label
+    local dragHint = Instance.new("TextLabel")
+    dragHint.Parent                 = root
+    dragHint.Size                   = UDim2.new(1, 0, 0, 10)
+    dragHint.Position               = UDim2.new(0, 0, 0.5, -5)
+    dragHint.Text                   = "✥ DRAG"
+    dragHint.Font                   = Enum.Font.GothamBold
+    dragHint.TextSize               = 7
+    dragHint.BackgroundTransparency = 1
+    dragHint.TextColor3             = ICE.DRAG_READY
+    dragHint.TextTransparency       = 1.0
+    dragHint.ZIndex                 = 22
+    dragHint.TextXAlignment         = Enum.TextXAlignment.Center
+
+    -- Ice crystals (угловые осколки — маленькие, добавляют атмосферу)
+    local crystalData = {
+        { UDim2.new(0, -1, 0, -1),   "◆",  9,  -25, 0.58 },
+        { UDim2.new(1, -8, 0, -1),   "◇",  8,   20, 0.60 },
+        { UDim2.new(0, -1, 1, -8),   "✦",  7,  -42, 0.63 },
+        { UDim2.new(1, -7, 1, -7),   "✧",  7,   37, 0.61 },
+        { UDim2.new(0.5, -5, 0, -1), "❄",  6,    0, 0.70 },
+        { UDim2.new(0.5, -5, 1, -6), "❅",  6,  180, 0.68 },
+    }
+    local crystals = {}
+    for i, cd in ipairs(crystalData) do
+        local cr = Instance.new("TextLabel")
+        cr.Parent                 = root
+        cr.Size                   = UDim2.new(0, cd[3], 0, cd[3])
+        cr.Position               = cd[1]
+        cr.Text                   = cd[2]
+        cr.TextSize               = cd[3]
+        cr.Font                   = Enum.Font.GothamBold
+        cr.BackgroundTransparency = 1
+        cr.TextColor3             = ICE.FROST
+        cr.TextTransparency       = cd[5]
+        cr.Rotation               = cd[4]
+        cr.ZIndex                 = 14
+        crystals[i] = { label = cr, baseTrans = cd[5], baseRot = cd[4], baseSize = cd[3] }
+    end
+
+    -- Снежинки на кнопке — меньше по размеру, меньше по кол-ву
+    local snowChars  = { "·","•","❄","❅","*","·","❆","·","·","❄","*","•","·","❄" }
+    local snowflakes = {}
+    for i = 1, 14 do
+        local sf = Instance.new("TextLabel")
+        sf.Parent                 = root
+        sf.Size                   = UDim2.new(0, 8, 0, 8)
+        sf.Position               = UDim2.new(rnd(0, 0.90), 0, rnd(-0.2, -1.0), 0)
+        sf.Text                   = snowChars[i]
+        sf.TextSize               = math.random(2, 5)   -- мельче, было 3-9
+        sf.Font                   = Enum.Font.Code
+        sf.BackgroundTransparency = 1
+        sf.TextColor3             = (i % 3 == 0) and ICE.PURE or ICE.FLAKE
+        sf.TextTransparency       = rnd(0.35, 0.75)
+        sf.ZIndex                 = 14
+        snowflakes[i] = {
+            label  = sf,
+            speedY = rnd(0.009, 0.030),   -- чуть медленнее
+            startX = rnd(0, 0.90),
+            wobble = rnd(0, math.pi * 2),
+            wSpeed = rnd(0.4, 1.9),
+            rot    = rnd(0, 360),
+            rotSpd = rnd(-120, 120),
+        }
+    end
+
+    -- Основная кнопка (непрозрачная)
+    local btn = Instance.new("TextButton")
+    btn.Name                    = "Btn"
+    btn.Parent                  = root
+    btn.Size                    = UDim2.new(1, -4, 1, -4)
+    btn.Position                = UDim2.new(0, 2, 0, 2)
+    btn.Text                    = ""
+    btn.BackgroundColor3        = ICE.DEEP
+    btn.BackgroundTransparency  = 0          -- SOLID
+    btn.BorderSizePixel         = 0
+    btn.ZIndex                  = 15
+    btn.AutoButtonColor         = false
+    newCorner(btn, CORNER_RADIUS - 1)
+
+    local btnGrad   = newGrad(btn, cfg.idleTopColor, cfg.idleBotColor, 112)
+    local btnStroke = newStroke(btn, 1.4, cfg.strokeIdle, 0.10)
+
+    -- Иконка
+    local icon = Instance.new("TextLabel")
+    icon.Parent                 = btn
+    icon.Size                   = UDim2.new(0, 30, 0, 30)
+    icon.Position               = UDim2.new(0.5, -15, 0, 3)
+    icon.Text                   = cfg.iconOff
+    icon.Font                   = Enum.Font.GothamBlack
+    icon.TextScaled             = true
+    icon.BackgroundTransparency = 1
+    icon.TextColor3             = ICE.FROST
+    icon.ZIndex                 = 16
+    local iconGrad = Instance.new("UIGradient", icon)
+    iconGrad.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0,   ICE.WHITE),
+        ColorSequenceKeypoint.new(0.5, ICE.PURE),
+        ColorSequenceKeypoint.new(1,   ICE.FROST),
+    }
+    iconGrad.Rotation = 45
+
+    -- Подпись
+    local lbl = Instance.new("TextLabel")
+    lbl.Parent                  = btn
+    lbl.Size                    = UDim2.new(1, 0, 0, 12)
+    lbl.Position                = UDim2.new(0, 0, 1, -15)
+    lbl.Text                    = cfg.labelText
+    lbl.Font                    = Enum.Font.GothamBold
+    lbl.TextSize                = 8
+    lbl.BackgroundTransparency  = 1
+    lbl.TextColor3              = ICE.TEXT_DIM
+    lbl.ZIndex                  = 16
+    lbl.TextXAlignment          = Enum.TextXAlignment.Center
+
+    -- Нижняя полоска
+    local bar = Instance.new("Frame")
+    bar.Parent                  = btn
+    bar.Size                    = UDim2.new(0.58, 0, 0, 2)
+    bar.Position                = UDim2.new(0.21, 0, 1, -5)
+    bar.BackgroundColor3        = ICE.PURE
+    bar.BackgroundTransparency  = 0.20
+    bar.BorderSizePixel         = 0
+    bar.ZIndex                  = 16
+    newCorner(bar, 1)
+    newGrad(bar, ICE.WHITE, ICE.PURE, 0)
+
+    return {
+        root             = root,
+        btn              = btn,
+        btnGrad          = btnGrad,
+        btnStroke        = btnStroke,
+        rootGrad         = rootGrad,
+        rootStroke       = rootStroke,
+        icon             = icon,
+        iconGrad         = iconGrad,
+        lbl              = lbl,
+        bar              = bar,
+        snowflakes       = snowflakes,
+        crystals         = crystals,
+        dragRing         = dragRing,
+        dragRingStroke   = dragRingStroke,
+        dragProgressBG   = dragProgressBG,
+        dragProgressFill = dragProgressFill,
+        dragHint         = dragHint,
+    }
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  СТРОИМ КНОПКУ (только AIM)
+-- ═══════════════════════════════════════════════════════════════
+local AIM = buildSnowButton({
+    px            = 0.02,
+    py            = 0.60,
+    idleTopColor  = Color3.fromRGB( 50, 115, 205),
+    idleBotColor  = Color3.fromRGB(  8,  18,  55),
+    onTopColor    = ICE.MINT_HOT,
+    onBotColor    = ICE.MINT_ABYSS,
+    strokeIdle    = ICE.STROKE_IDLE,
+    strokeOn      = ICE.STROKE_AIM,
+    iconOff       = "❄",
+    iconOn        = "🔒",
+    labelText     = "V · AIM",
+})
+
+-- ═══════════════════════════════════════════════════════════════
+--  ДВИЖОК СНЕГОПАДА (мелкие снежинки, только внутри кнопки)
+-- ═══════════════════════════════════════════════════════════════
+local snowCharsAll = { "·","•","❄","❅","*","❆","·","•","·","*","❅","·" }
+
+task.spawn(function()
+    local time = 0
+    while gui.Parent do
+        local dt = task.wait(0.033)
+        time = time + dt
+        for _, sf in ipairs(AIM.snowflakes) do
+            local sl = sf.label
+            local py = sl.Position.Y.Scale + sf.speedY * dt * 30
+            local wobX = math.sin(time * sf.wSpeed + sf.wobble) * 0.015
+            local px = sf.startX + wobX
+            sf.rot = (sf.rot + sf.rotSpd * dt) % 360
+            if py > 1.14 then
+                py = rnd(-0.18, 0.0)
+                px = rnd(0, 0.90)
+                sf.startX = px
+                sl.Text     = snowCharsAll[math.random(#snowCharsAll)]
+                sl.TextSize = math.random(2, 5)
+                sl.TextTransparency = rnd(0.35, 0.75)
+            end
+            sl.Position = UDim2.new(clamp(px, 0, 0.92), 0, py, 0)
+            sl.Rotation = sf.rot
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+--  ДВИЖОК КРИСТАЛЛОВ (мерцание угловых осколков)
+-- ═══════════════════════════════════════════════════════════════
+task.spawn(function()
+    local time = 0
+    while gui.Parent do
+        time = time + task.wait(0.04)
+        for i, cd in ipairs(AIM.crystals) do
+            local phase = time * 0.62 + i * 1.1
+            local s     = 0.5 + 0.5 * math.sin(phase)
+            cd.label.TextTransparency = lerp(cd.baseTrans, cd.baseTrans - 0.32, s)
+            cd.label.Rotation         = cd.baseRot + math.sin(phase * 0.8) * 13
+            local scale = lerp(0.88, 1.0, s)
+            cd.label.TextSize = math.max(4, math.floor(cd.baseSize * scale + 0.5))
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+--  ДВИЖОК ДЫХАНИЯ ИКОНКИ
+-- ═══════════════════════════════════════════════════════════════
+task.spawn(function()
+    local time = 0
+    while gui.Parent do
+        time = time + task.wait(0.04)
+        local breath = 0.5 + 0.5 * math.sin(time * 0.68)
+        local py     = lerp(3, 6, breath)
+        AIM.icon.Position = UDim2.new(0.5, -15, 0, py)
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+--  RIPPLE
+-- ═══════════════════════════════════════════════════════════════
+local function spawnRipple(parent, x, y, color)
+    local ripple = Instance.new("Frame")
+    ripple.Parent                 = parent
+    ripple.Size                   = UDim2.new(0, 6, 0, 6)
+    ripple.Position               = UDim2.new(0, x - 3, 0, y - 3)
+    ripple.BackgroundColor3       = color or ICE.PURE
+    ripple.BackgroundTransparency = 0.22
+    ripple.BorderSizePixel        = 0
+    ripple.ZIndex                 = 18
+    newCorner(ripple, 999)
+    local sz = 94
+    TweenSvc:Create(ripple, TweenInfo.new(0.54, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size                   = UDim2.new(0, sz, 0, sz),
+        Position               = UDim2.new(0, x - sz/2, 0, y - sz/2),
+        BackgroundTransparency = 1.0,
+    }):Play()
+    local ring = Instance.new("Frame")
+    ring.Parent                 = parent
+    ring.Size                   = UDim2.new(0, 10, 0, 10)
+    ring.Position               = UDim2.new(0, x - 5, 0, y - 5)
+    ring.BackgroundTransparency = 1.0
+    ring.BorderSizePixel        = 0
+    ring.ZIndex                 = 17
+    newCorner(ring, 999)
+    local ringSt = newStroke(ring, 1.8, color or ICE.PURE, 0.0)
+    local sz2 = 58
+    TweenSvc:Create(ring, TweenInfo.new(0.42, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, sz2, 0, sz2), Position = UDim2.new(0, x - sz2/2, 0, y - sz2/2),
+    }):Play()
+    TweenSvc:Create(ringSt, TweenInfo.new(0.42, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Transparency = 1.0,
+    }):Play()
+    game:GetService("Debris"):AddItem(ripple, 0.60)
+    game:GetService("Debris"):AddItem(ring,   0.50)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  FROST BURST (при смене состояния)
+-- ═══════════════════════════════════════════════════════════════
+local burstChars = { "❄","·","✦","◆","❅","◇","*","❆","✧","·","•","❄" }
+
+local function spawnFrostBurst(parent, color)
+    local cx = BTN_W / 2 - 2
+    local cy = BTN_H / 2 - 2
+    for i = 1, 8 do
+        local angle = (i - 1) * (math.pi * 2 / 8) + rnd(-0.28, 0.28)
+        local dist  = rnd(16, 36)
+        local tx    = cx + math.cos(angle) * dist
+        local ty    = cy + math.sin(angle) * dist
+        local shard = Instance.new("TextLabel")
+        shard.Parent                 = parent
+        shard.Size                   = UDim2.new(0, 11, 0, 11)
+        shard.Position               = UDim2.new(0, cx - 5, 0, cy - 5)
+        shard.Text                   = burstChars[math.random(#burstChars)]
+        shard.TextSize               = math.random(6, 10)
+        shard.Font                   = Enum.Font.GothamBold
+        shard.BackgroundTransparency = 1
+        shard.TextColor3             = color or ICE.PURE
+        shard.TextTransparency       = 0
+        shard.ZIndex                 = 19
+        shard.Rotation               = math.random(0, 360)
+        TweenSvc:Create(shard, TweenInfo.new(0.52, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position         = UDim2.new(0, tx - 5, 0, ty - 5),
+            TextTransparency = 1.0,
+            Rotation         = shard.Rotation + math.random(90, 280),
+        }):Play()
+        game:GetService("Debris"):AddItem(shard, 0.60)
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  DRAG READY / HIDE
+-- ═══════════════════════════════════════════════════════════════
+local function showDragReady(btnData)
+    tw(btnData.dragRingStroke, TW.FAST, { Transparency = 0.0 })
+    tw(btnData.dragHint,       TW.FAST, { TextTransparency = 0.18 })
+    spawnRipple(btnData.btn, BTN_W / 2, BTN_H / 2, ICE.DRAG_READY)
+    -- лёгкое дрожание для тактильного фидбека
+    local ox = btnData.root.Position.X.Offset
+    local oy = btnData.root.Position.Y.Offset
+    local sx = btnData.root.Position.X.Scale
+    local sy = btnData.root.Position.Y.Scale
+    tw(btnData.root, TW.WOBBLE, { Position = UDim2.new(sx, ox + 3, sy, oy) })
+    delay(0.10, function()
+        tw(btnData.root, TW.WOBBLE, { Position = UDim2.new(sx, ox - 3, sy, oy) })
+    end)
+    delay(0.20, function()
+        tw(btnData.root, TW.BOUNCE, { Position = UDim2.new(sx, ox, sy, oy) })
+    end)
+end
+
+local function hideDragReady(btnData)
+    tw(btnData.dragRingStroke, TW.MED, { Transparency = 1.0 })
+    tw(btnData.dragHint,       TW.MED, { TextTransparency = 1.0 })
+    tw(btnData.dragProgressFill, TW.FAST, { Size = UDim2.new(0, 0, 0, 0) })
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  АНИМАЦИЯ НАЖАТИЯ
+-- ═══════════════════════════════════════════════════════════════
+local pressState = false
+
+local function onPressDown(btnData)
+    if pressState then return end
+    pressState = true
+    tw(btnData.btn, TW.SNAP, { BackgroundTransparency = 0.22 })
+end
+
+local function onPressUp(btnData)
+    if not pressState then return end
+    pressState = false
+    tw(btnData.btn, TW.SNAP, { BackgroundTransparency = 0 })
+    hideDragReady(btnData)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  ВИЗУАЛЬНОЕ СОСТОЯНИЕ AIM (вкл/выкл)
+-- ═══════════════════════════════════════════════════════════════
+local aimVisualOn = false
+
+local function setAimVisual(on)
+    if on == aimVisualOn then return end
+    aimVisualOn = on
+    spawnFrostBurst(AIM.btn, on and ICE.MINT_HOT or ICE.PURE)
+    if on then
+        tw(AIM.btnGrad, TW.FAST, { Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, ICE.MINT_HOT),
+            ColorSequenceKeypoint.new(1, ICE.MINT_ABYSS),
+        }})
+        tw(AIM.btnStroke,  TW.FAST, { Color = ICE.STROKE_AIM,  Transparency = 0 })
+        tw(AIM.rootStroke, TW.FAST, { Color = ICE.STROKE_AIM,  Transparency = 0 })
+        tw(AIM.rootGrad,   TW.MED,  { Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB( 0, 54, 44)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB( 0, 14, 11)),
+        }})
+        tw(AIM.icon, TW.FAST, { TextColor3 = ICE.TEXT_WHITE })
+        tw(AIM.lbl,  TW.FAST, { TextColor3 = ICE.MINT_HOT })
+        tw(AIM.bar,  TW.MED,  { BackgroundColor3 = ICE.MINT_HOT })
+        AIM.icon.Text = "🔒"
+    else
+        tw(AIM.btnGrad, TW.FAST, { Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB( 50, 115, 205)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(  8,  18,  55)),
+        }})
+        tw(AIM.btnStroke,  TW.FAST, { Color = ICE.STROKE_IDLE, Transparency = 0.10 })
+        tw(AIM.rootStroke, TW.FAST, { Color = ICE.STROKE_IDLE, Transparency = 0 })
+        tw(AIM.rootGrad,   TW.MED,  { Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 32, 72)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB( 3,  6, 20)),
+        }})
+        tw(AIM.icon, TW.FAST, { TextColor3 = ICE.FROST })
+        tw(AIM.lbl,  TW.FAST, { TextColor3 = ICE.TEXT_DIM })
+        tw(AIM.bar,  TW.MED,  { BackgroundColor3 = ICE.PURE })
+        AIM.icon.Text = "❄"
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  DRAG — 444 мс зажать → fill из центра → тащи куда угодно
+--
+--  Используем UIS.InputChanged (глобальное событие) чтобы
+--  движение работало даже когда палец вышел за пределы кнопки.
+-- ═══════════════════════════════════════════════════════════════
+local function makeDraggable(btnData)
+    local pressActive = false
+    local dragActive  = false
+    local moved       = false
+    local dragStart   = nil
+    local startPos    = nil
+    local activeInput = nil
+
+    -- Нажатие
+    btnData.root.InputBegan:Connect(function(i)
+        if i.UserInputType ~= Enum.UserInputType.Touch
+        and i.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+
+        activeInput = i
+        pressActive = true
+        dragActive  = false
+        moved       = false
+        dragStart   = Vector2.new(i.Position.X, i.Position.Y)
+        startPos    = btnData.root.Position
+
+        onPressDown(btnData)
+
+        -- Fill из центра за DRAG_THRESHOLD секунд
+        task.spawn(function()
+            local t0fill = tick()
+            while pressActive do
+                local elapsed  = tick() - t0fill
+                local progress = clamp(elapsed / DRAG_THRESHOLD, 0, 1)
+                btnData.dragProgressFill.Size = UDim2.new(progress, 0, progress, 0)
+
+                if elapsed >= DRAG_THRESHOLD then
+                    dragActive = true
+                    showDragReady(btnData)
+                    break
+                end
+                task.wait(0.016)
+            end
+            -- отпустили раньше — схлопываем fill
+            if not pressActive then
+                btnData.dragProgressFill.Size = UDim2.new(0, 0, 0, 0)
+            end
+        end)
+    end)
+
+    -- Отпускание (глобально — работает даже вне кнопки)
+    UIS.InputEnded:Connect(function(i)
+        if i ~= activeInput then return end
+        activeInput = nil
+        pressActive = false
+        dragActive  = false
+        onPressUp(btnData)
+    end)
+
+    -- Движение (глобально — единственный рабочий способ на мобайле)
+    UIS.InputChanged:Connect(function(i)
+        if i ~= activeInput then return end
+        if not dragActive then return end
+
+        local dx = i.Position.X - dragStart.X
+        local dy = i.Position.Y - dragStart.Y
+        if math.sqrt(dx*dx + dy*dy) > 6 then moved = true end
+
+        btnData.root.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + dx,
+            startPos.Y.Scale, startPos.Y.Offset + dy
+        )
+    end)
+
+    return function() return moved end
+end
+
+local aimMoved = makeDraggable(AIM)
+
+-- ═══════════════════════════════════════════════════════════════
+--  ТРЕКИНГ КАСАНИЯ ИГРОВОЙ ЗОНЫ
+-- ═══════════════════════════════════════════════════════════════
+local lastGameTouchPos = nil
+
+local function isOnButton(pos)
+    local abs = AIM.root.AbsolutePosition
+    local sz  = AIM.root.AbsoluteSize
+    return pos.X >= abs.X and pos.X <= abs.X + sz.X
+       and pos.Y >= abs.Y and pos.Y <= abs.Y + sz.Y
+end
+
+UIS.TouchStarted:Connect(function(touch, _gp)
+    local pos = Vector2.new(touch.Position.X, touch.Position.Y)
+    if not isOnButton(pos) then
+        lastGameTouchPos       = pos
+        _G.AntiEmoLastTouchPos = pos
+    end
+end)
+
+UIS.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        local pos = Vector2.new(i.Position.X, i.Position.Y)
+        if not isOnButton(pos) then
+            lastGameTouchPos       = pos
+            _G.AntiEmoLastTouchPos = pos
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+--  ИГРОВАЯ ЛОГИКА
+-- ═══════════════════════════════════════════════════════════════
+local function isAlive(p)
+    if not p.Character then return false end
+    local h = p.Character:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+local function getNearestToScreenPos(screenPos)
+    local best, bestDist = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and isAlive(p) then
+            local root = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local vp, onScreen = Camera:WorldToViewportPoint(root.Position)
+                if onScreen then
+                    local d = (Vector2.new(vp.X, vp.Y) - screenPos).Magnitude
+                    if d < bestDist then bestDist = d; best = p end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function refreshAim()
+    setAimVisual(API.isLocked())
+end
+
+-- Ripple при касании
+AIM.btn.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.Touch
+    or i.UserInputType == Enum.UserInputType.MouseButton1 then
+        local abs = AIM.btn.AbsolutePosition
+        spawnRipple(AIM.btn,
+            i.Position.X - abs.X,
+            i.Position.Y - abs.Y,
+            aimVisualOn and ICE.MINT_HOT or ICE.PURE
+        )
+    end
+end)
+
+-- Основной обработчик нажатия
+AIM.btn.MouseButton1Click:Connect(function()
+    if aimMoved() then return end
+    local touchPos = lastGameTouchPos or UIS:GetMouseLocation()
+    local target   = getNearestToScreenPos(touchPos)
+    if API.isLocked() then
+        API.toggleAimLock()
+    elseif target and API.lockOnPlayer then
+        API.lockOnPlayer(target)
+    else
+        API.toggleAimLock()
+    end
+    refreshAim()
+end)
+
+-- Синхронизация состояния
+task.spawn(function()
+    while task.wait(0.4) do
+        if not gui.Parent then break end
+        refreshAim()
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+--  АНИМАЦИЯ ПОЯВЛЕНИЯ
+-- ═══════════════════════════════════════════════════════════════
+do
+    local op = AIM.root.Position
+    AIM.root.Position               = UDim2.new(op.X.Scale, op.X.Offset, op.Y.Scale, op.Y.Offset + 110)
+    AIM.root.BackgroundTransparency = 1.0
+    AIM.btn.BackgroundTransparency  = 1.0
+    AIM.icon.TextTransparency       = 1.0
+    AIM.lbl.TextTransparency        = 1.0
+    for _, cd in ipairs(AIM.crystals) do
+        cd.label.TextTransparency = 1.0
+    end
+
+    task.wait(0.20)
+    tw(AIM.root, TW.RISE, {
+        Position               = UDim2.new(op.X.Scale, op.X.Offset, op.Y.Scale, op.Y.Offset),
+        BackgroundTransparency = 0,
+    })
+    tw(AIM.btn,  TW.MED,    { BackgroundTransparency = 0 })
+    tw(AIM.icon, TW.BOUNCE, { TextTransparency = 0 })
+    tw(AIM.lbl,  TW.MED,    { TextTransparency = 0 })
+    for i, cd in ipairs(AIM.crystals) do
+        delay(i * 0.055, function()
+            tw(cd.label, TW.SPRING, { TextTransparency = cd.baseTrans })
+        end)
+    end
+    delay(0.38, function() spawnRipple(AIM.btn, BTN_W / 2, BTN_H / 2, ICE.PURE) end)
+    delay(0.55, function() spawnFrostBurst(AIM.btn, ICE.FROST) end)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+print("[SnowButtons v10] ✓ ❄  Solid bg | tiny snow | drag=444ms+fill | no glass")
