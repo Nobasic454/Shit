@@ -1,0 +1,525 @@
+
+local Players  = game:GetService("Players")
+local Camera   = workspace.CurrentCamera
+local UIS      = game:GetService("UserInputService")
+local TweenSvc = game:GetService("TweenService")
+local LP       = Players.LocalPlayer
+
+local t0 = tick()
+while not _G.AntiEmoAPI and (tick() - t0) < 44 do task.wait(0.1) end
+if not _G.AntiEmoAPI then return end
+local API = _G.AntiEmoAPI
+local ICE = {
+    ABYSS        = Color3.fromRGB(  5,   9,  28),
+    DEEP         = Color3.fromRGB( 10,  22,  58),
+    PURE         = Color3.fromRGB( 80, 168, 238),
+    FROST        = Color3.fromRGB(158, 218, 255),
+    FLAKE        = Color3.fromRGB(200, 234, 255),
+    WHITE        = Color3.fromRGB(230, 245, 255),
+    MINT_HOT     = Color3.fromRGB(  0, 255, 178),
+    MINT_ABYSS   = Color3.fromRGB(  0,  22,  18),
+    DRAG_READY   = Color3.fromRGB(120, 225, 255),
+    DRAG_GLOW    = Color3.fromRGB( 80, 200, 255),
+    TEXT_DIM     = Color3.fromRGB(120, 168, 210),
+    TEXT_WHITE   = Color3.new(1, 1, 1),
+    STROKE_IDLE  = Color3.fromRGB(255, 255, 255),
+    STROKE_AIM   = Color3.fromRGB(  0, 238, 198),
+}
+
+local TW = {
+    SNAP    = TweenInfo.new(0.08, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    FAST    = TweenInfo.new(0.16, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    MED     = TweenInfo.new(0.30, Enum.EasingStyle.Quad,    Enum.EasingDirection.Out),
+    BOUNCE  = TweenInfo.new(0.45, Enum.EasingStyle.Back,    Enum.EasingDirection.Out),
+    SPRING  = TweenInfo.new(0.55, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+    RISE    = TweenInfo.new(0.50, Enum.EasingStyle.Back,    Enum.EasingDirection.Out),
+    WOBBLE  = TweenInfo.new(0.10, Enum.EasingStyle.Sine,    Enum.EasingDirection.InOut),
+}
+
+local function rnd(a, b)       return a + math.random() * (b - a) end
+local function lerp(a, b, t)   return a + (b - a) * t             end
+local function clamp(v,mn,mx)  return math.max(mn, math.min(mx, v)) end
+local function tw(obj, info, props) TweenSvc:Create(obj, info, props):Play() end
+local function delay(t, fn)    task.delay(t, fn) end
+
+local function newCorner(parent, r)
+    local c = Instance.new("UICorner", parent); c.CornerRadius = UDim.new(0, r); return c
+end
+local function newStroke(parent, thick, col, trans)
+    local s = Instance.new("UIStroke", parent)
+    s.Thickness = thick or 2; s.Color = col or ICE.STROKE_IDLE; s.Transparency = trans or 0
+    return s
+end
+local function newGrad(parent, c1, c2, rot)
+    local g = Instance.new("UIGradient", parent)
+    g.Color = ColorSequence.new{ColorSequenceKeypoint.new(0,c1), ColorSequenceKeypoint.new(1,c2)}
+    g.Rotation = rot or 90; return g
+end
+local function newGrad3(parent, c1, c2, c3, rot)
+    local g = Instance.new("UIGradient", parent)
+    g.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, c1), ColorSequenceKeypoint.new(0.5, c2), ColorSequenceKeypoint.new(1, c3),
+    }
+    g.Rotation = rot or 90; return g
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name            = "AntiEmoMobileButtons"
+gui.Parent          = (gethui and gethui()) or game:GetService("CoreGui")
+gui.ResetOnSpawn    = false
+gui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+gui.IgnoreGuiInset  = true
+gui.DisplayOrder    = 999
+
+local CORNER_RADIUS  = 5
+local BTN_W, BTN_H   = 78, 50
+local DRAG_THRESHOLD = 0.444
+
+local function buildSnowButton(cfg)
+    local root = Instance.new("Frame")
+    root.Name                   = "BtnRoot"
+    root.Parent                 = gui
+    root.Size                   = UDim2.new(0, BTN_W, 0, BTN_H)
+    root.Position               = UDim2.new(cfg.px, 0, cfg.py, 0)
+    root.BackgroundColor3       = ICE.ABYSS
+    root.BackgroundTransparency = 0
+    root.BorderSizePixel        = 0
+    root.ZIndex                 = 10
+    root.ClipsDescendants       = true
+    root.Active                 = true
+    newCorner(root, CORNER_RADIUS)
+
+    local rootGrad   = newGrad(root, Color3.fromRGB(8,20,80), Color3.fromRGB(2,4,28), 130)
+    local rootStroke = newStroke(root, 1.6, cfg.strokeIdle, 0)
+
+    -- Drag ring
+    local dragRing = Instance.new("Frame")
+    dragRing.Name                   = "DragRing"
+    dragRing.Parent                 = root
+    dragRing.Size                   = UDim2.new(1, 4, 1, 4)
+    dragRing.Position               = UDim2.new(0, -2, 0, -2)
+    dragRing.BackgroundTransparency = 1.0
+    dragRing.BorderSizePixel        = 0
+    dragRing.ZIndex                 = 13
+    dragRing.Active                 = false
+    local dragRingStroke = newStroke(dragRing, 2.8, ICE.DRAG_READY, 1.0)
+    newCorner(dragRing, CORNER_RADIUS + 2)
+
+    -- Drag fill BG
+
+
+
+    -- Drag hint
+    local dragHint = Instance.new("TextLabel")
+    dragHint.Parent                 = root
+    dragHint.Size                   = UDim2.new(1, 0, 0, 10)
+    dragHint.Position               = UDim2.new(0, 0, 0.5, -5)
+    dragHint.Text                   = "✥ DRAG"
+    dragHint.Font                   = Enum.Font.GothamBold
+    dragHint.TextSize               = 7
+    dragHint.BackgroundTransparency = 1
+    dragHint.TextColor3             = ICE.DRAG_READY
+    dragHint.TextTransparency       = 1.0
+    dragHint.ZIndex                 = 18
+    dragHint.Active                 = false
+
+    -- Ice crystals
+    local crystalData = {
+        { UDim2.new(0, -1, 0, -1),   cfg.crystalChar or "❄",  7,  -25, 0.60 },
+        { UDim2.new(1, -8, 0, -1),   cfg.crystalChar2 or "❅", 6,   20, 0.62 },
+        { UDim2.new(0, -1, 1, -8),   cfg.crystalChar or "❄",  5,  -42, 0.65 },
+        { UDim2.new(1, -7, 1, -7),   cfg.crystalChar2 or "❅", 5,   37, 0.63 },
+        { UDim2.new(0.5, -5, 0, -1), cfg.crystalChar or "❄",  5,    0, 0.70 },
+        { UDim2.new(0.5, -5, 1, -6), cfg.crystalChar2 or "❅", 5,  180, 0.68 },
+    }
+    local crystals = {}
+    for i, cd in ipairs(crystalData) do
+        local cr = Instance.new("TextLabel")
+        cr.Parent = root; cr.Size = UDim2.new(0, cd[3], 0, cd[3]); cr.Position = cd[1]
+        cr.Text = cd[2]; cr.TextSize = cd[3]; cr.Font = Enum.Font.GothamBold
+        cr.BackgroundTransparency = 1; cr.TextColor3 = cfg.crystalColor or ICE.FROST
+        cr.TextTransparency = cd[5]; cr.Rotation = cd[4]; cr.ZIndex = 14; cr.Active = false
+        crystals[i] = { label = cr, baseTrans = cd[5], baseRot = cd[4], baseSize = cd[3] }
+    end
+
+    -- Снежинки / частицы — 35 штук
+    local snowChars = cfg.snowChars or { "❄","❅","*","❄","❅","*","❄","❅","*","❄" }
+    local snowflakes = {}
+    for i = 1, 60 do
+        local sf = Instance.new("TextLabel")
+        sf.Parent                 = root
+        sf.Size                   = UDim2.new(0, 8, 0, 8)
+        sf.Position               = UDim2.new(rnd(0, 1.0), 0, rnd(-0.15, 1.0), 0)
+        sf.Text                   = snowChars[(i % #snowChars) + 1]
+        sf.TextSize               = math.random(3, 7)
+        sf.Font                   = Enum.Font.GothamBold
+        sf.BackgroundTransparency = 1
+        sf.TextColor3             = (i % 3 == 0) and (cfg.snowColorAlt or ICE.PURE) or (cfg.snowColorMain or ICE.WHITE)
+        sf.TextTransparency       = rnd(0.05, 0.35)
+        sf.ZIndex                 = 20
+        sf.Active                 = false
+        snowflakes[i] = {
+            label  = sf,
+            speedY = rnd(0.012, 0.040),
+            startX = rnd(0, 1.0),
+            wobble = rnd(0, math.pi * 2),
+            wSpeed = rnd(0.3, 1.6),
+            rot    = rnd(0, 360),
+            rotSpd = rnd(-100, 100),
+        }
+    end
+
+    -- Основная кнопка
+    local btn = Instance.new("TextButton")
+    btn.Name                    = "Btn"
+    btn.Parent                  = root
+    btn.Size                    = UDim2.new(1, -4, 1, -4)
+    btn.Position                = UDim2.new(0, 2, 0, 2)
+    btn.Text                    = ""
+    btn.BackgroundColor3        = ICE.DEEP
+    btn.BackgroundTransparency  = 0
+    btn.BorderSizePixel         = 0
+    btn.ZIndex                  = 15
+    btn.AutoButtonColor         = false
+    newCorner(btn, CORNER_RADIUS - 1)
+
+    local btnGrad   = newGrad(btn, cfg.idleTopColor, cfg.idleBotColor, 112)
+    local btnStroke = newStroke(btn, 1.4, cfg.strokeIdle, 0.10)
+
+    -- Иконка
+    local icon = Instance.new("TextLabel")
+    icon.Parent = btn; icon.Size = UDim2.new(0, 30, 0, 30); icon.Position = UDim2.new(0.5,-15,0,3)
+    icon.Text = cfg.iconOff; icon.Font = Enum.Font.GothamBlack; icon.TextScaled = true
+    icon.BackgroundTransparency = 1; icon.TextColor3 = cfg.iconColor or ICE.FROST
+    icon.ZIndex = 16; icon.Active = false
+    local iconGrad = Instance.new("UIGradient", icon)
+    iconGrad.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, ICE.WHITE),
+        ColorSequenceKeypoint.new(0.5, cfg.iconMidColor or ICE.PURE),
+        ColorSequenceKeypoint.new(1, cfg.iconColor or ICE.FROST),
+    }; iconGrad.Rotation = 45
+
+    -- Подпись
+    local lbl = Instance.new("TextLabel")
+    lbl.Parent = btn; lbl.Size = UDim2.new(1,0,0,12); lbl.Position = UDim2.new(0,0,1,-15)
+    lbl.Text = cfg.labelText; lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 8
+    lbl.BackgroundTransparency = 1; lbl.TextColor3 = ICE.TEXT_DIM; lbl.ZIndex = 16
+    lbl.TextXAlignment = Enum.TextXAlignment.Center; lbl.Active = false
+
+    -- Нижняя полоска
+    local bar = Instance.new("Frame")
+    bar.Parent = btn; bar.Size = UDim2.new(0.58,0,0,2); bar.Position = UDim2.new(0.21,0,1,-5)
+    bar.BackgroundColor3 = cfg.barColor or ICE.PURE; bar.BackgroundTransparency = 0.20
+    bar.BorderSizePixel = 0; bar.ZIndex = 16; bar.Active = false
+    newCorner(bar, 1); newGrad(bar, ICE.WHITE, cfg.barColor or ICE.PURE, 0)
+
+    return {
+        root=root, btn=btn, btnGrad=btnGrad, btnStroke=btnStroke,
+        rootGrad=rootGrad, rootStroke=rootStroke, icon=icon, iconGrad=iconGrad,
+        lbl=lbl, bar=bar, snowflakes=snowflakes, crystals=crystals,
+        dragRing=dragRing, dragRingStroke=dragRingStroke,
+        dragHint=dragHint,
+        cfg=cfg,
+    }
+end
+
+local AIM = buildSnowButton({
+    px=0.02, py=0.60,
+    idleTopColor = Color3.fromRGB(30,80,200), idleBotColor = Color3.fromRGB(5,10,50),
+    strokeIdle = ICE.STROKE_IDLE, strokeOn = ICE.STROKE_AIM,
+    iconOff = "", iconOn = "🔒", labelText = "",
+    iconColor = ICE.FROST, iconMidColor = ICE.PURE,
+    barColor = ICE.PURE,
+    crystalColor = ICE.FROST, crystalChar = "❄", crystalChar2 = "❅",
+    snowColorMain = ICE.WHITE, snowColorAlt = ICE.FROST,
+    activeHotColor = ICE.MINT_HOT, activeAbyssColor = ICE.MINT_ABYSS,
+    activeStroke = ICE.STROKE_AIM,
+    snowChars = { "❄","❅","*","❄","❅","*","❄","❅","*","❄" },
+    dragFillColor = ICE.DRAG_READY, dragGlow = ICE.DRAG_GLOW,
+})
+AIM.bar.Visible  = false
+AIM.lbl.Visible  = false
+AIM.icon.Size    = UDim2.new(0,0,0,0)
+
+
+
+
+local function startParticles(btnData)
+    task.spawn(function()
+        local time = 0
+        while gui.Parent do
+            local dt = task.wait(0.033)
+            time = time + dt
+            for _, sf in ipairs(btnData.snowflakes) do
+                local sl = sf.label
+                local py = sl.Position.Y.Scale + sf.speedY * dt * 30
+                local wobX = math.sin(time * sf.wSpeed + sf.wobble) * 0.014
+                local px = sf.startX + wobX
+                sf.rot = (sf.rot + sf.rotSpd * dt) % 360
+                if py > 1.15 then
+                    py = rnd(-0.15, 0)
+                    px = rnd(0, 1.0)
+                    sf.startX = px
+                    sl.TextTransparency = rnd(0.05, 0.35)
+                end
+                sl.Position = UDim2.new(clamp(px, 0, 1.0), 0, py, 0)
+                sl.Rotation = sf.rot
+            end
+        end
+    end)
+end
+
+local function startCrystals(btnData)
+    task.spawn(function()
+        local time = 0
+        while gui.Parent do
+            time = time + task.wait(0.04)
+            for i, cd in ipairs(btnData.crystals) do
+                local phase = time * 0.62 + i * 1.1
+                local s = 0.5 + 0.5 * math.sin(phase)
+                cd.label.TextTransparency = lerp(cd.baseTrans, cd.baseTrans - 0.32, s)
+                cd.label.Rotation = cd.baseRot + math.sin(phase * 0.8) * 13
+                cd.label.TextSize = math.max(4, math.floor(cd.baseSize * lerp(0.88, 1.0, s) + 0.5))
+            end
+        end
+    end)
+end
+
+local function startIconBreathe(btnData)
+    task.spawn(function()
+        local time = 0
+        while gui.Parent do
+            time = time + task.wait(0.04)
+            btnData.icon.Position = UDim2.new(0.5, -15, 0, lerp(3, 6, 0.5 + 0.5*math.sin(time*0.68)))
+        end
+    end)
+end
+
+startParticles(AIM)
+startCrystals(AIM)
+startIconBreathe(AIM)
+
+local function spawnRipple(parent, x, y, color)
+    local ripple = Instance.new("Frame")
+    ripple.Parent = parent; ripple.Size = UDim2.new(0,6,0,6)
+    ripple.Position = UDim2.new(0,x-3,0,y-3); ripple.BackgroundColor3 = color or ICE.PURE
+    ripple.BackgroundTransparency = 0.22; ripple.BorderSizePixel = 0
+    ripple.ZIndex = 18; ripple.Active = false
+    newCorner(ripple, 999)
+    local sz = 94
+    TweenSvc:Create(ripple, TweenInfo.new(0.54,Enum.EasingStyle.Quad,Enum.EasingDirection.Out), {
+        Size=UDim2.new(0,sz,0,sz), Position=UDim2.new(0,x-sz/2,0,y-sz/2), BackgroundTransparency=1.0,
+    }):Play()
+    game:GetService("Debris"):AddItem(ripple, 0.60)
+end
+
+local burstCharsIce = { "❄","·","❅","*","❄","❅","·","*","❄","·","•" }
+
+local function spawnBurst(parent, color, chars)
+    chars = chars or burstCharsIce
+    local cx, cy = BTN_W/2-2, BTN_H/2-2
+    for i = 1, 8 do
+        local angle = (i-1)*(math.pi*2/8) + rnd(-0.28,0.28)
+        local dist  = rnd(16, 36)
+        local shard = Instance.new("TextLabel")
+        shard.Parent = parent; shard.Size = UDim2.new(0,11,0,11)
+        shard.Position = UDim2.new(0,cx-5,0,cy-5)
+        shard.Text = chars[math.random(#chars)]; shard.TextSize = math.random(6,10)
+        shard.Font = Enum.Font.GothamBold; shard.BackgroundTransparency = 1
+        shard.TextColor3 = color or ICE.PURE; shard.TextTransparency = 0
+        shard.ZIndex = 19; shard.Active = false; shard.Rotation = math.random(0,360)
+        local tx, ty = cx + math.cos(angle)*dist, cy + math.sin(angle)*dist
+        TweenSvc:Create(shard, TweenInfo.new(0.52,Enum.EasingStyle.Quad,Enum.EasingDirection.Out), {
+            Position=UDim2.new(0,tx-5,0,ty-5), TextTransparency=1.0,
+            Rotation=shard.Rotation+math.random(90,280),
+        }):Play()
+        game:GetService("Debris"):AddItem(shard, 0.60)
+    end
+end
+
+local function showDragReady(btnData)
+    tw(btnData.dragRingStroke, TW.FAST, { Transparency = 0.0 })
+    tw(btnData.dragHint,       TW.FAST, { TextTransparency = 0.18 })
+    spawnRipple(btnData.btn, BTN_W/2, BTN_H/2, ICE.DRAG_READY)
+    local ox = btnData.root.Position.X.Offset; local oy = btnData.root.Position.Y.Offset
+    local sx = btnData.root.Position.X.Scale;  local sy = btnData.root.Position.Y.Scale
+    tw(btnData.root, TW.WOBBLE, { Position = UDim2.new(sx,ox+3,sy,oy) })
+    delay(0.10, function() tw(btnData.root, TW.WOBBLE, { Position=UDim2.new(sx,ox-3,sy,oy) }) end)
+    delay(0.20, function() tw(btnData.root, TW.BOUNCE, { Position=UDim2.new(sx,ox,sy,oy) }) end)
+end
+
+local function hideDragReady(btnData)
+    tw(btnData.dragRingStroke, TW.MED, { Transparency = 1.0 })
+    tw(btnData.dragHint,       TW.MED, { TextTransparency = 1.0 })
+end
+
+local pressStates = {}
+
+local function onPressDown(btnData)
+    if pressStates[btnData] then return end; pressStates[btnData] = true
+    tw(btnData.btn, TW.SNAP, { BackgroundTransparency = 0.22 })
+end
+
+local function onPressUp(btnData)
+    if not pressStates[btnData] then return end; pressStates[btnData] = false
+    tw(btnData.btn, TW.SNAP, { BackgroundTransparency = 0 })
+    hideDragReady(btnData)
+end
+
+local aimVisualOn = false
+
+local function setAimVisual(on)
+    if on == aimVisualOn then return end
+    aimVisualOn = on
+    spawnBurst(AIM.btn, on and ICE.MINT_HOT or ICE.PURE, burstCharsIce)
+    if on then
+        tw(AIM.btnGrad, TW.FAST, { Color=ColorSequence.new{
+            ColorSequenceKeypoint.new(0,ICE.MINT_HOT), ColorSequenceKeypoint.new(1,ICE.MINT_ABYSS)} })
+        tw(AIM.btnStroke,  TW.FAST, { Color=ICE.STROKE_AIM,  Transparency=0 })
+        tw(AIM.rootStroke, TW.FAST, { Color=ICE.STROKE_AIM,  Transparency=0 })
+        tw(AIM.rootGrad, TW.MED, { Color=ColorSequence.new{
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(0,54,44)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(0,14,11))} })
+        tw(AIM.icon, TW.FAST, { TextColor3=ICE.TEXT_WHITE })
+        tw(AIM.lbl,  TW.FAST, { TextColor3=ICE.MINT_HOT })
+        tw(AIM.bar,  TW.MED,  { BackgroundColor3=ICE.MINT_HOT })
+        AIM.icon.Text = "🔒"
+    else
+        tw(AIM.btnGrad, TW.FAST, { Color=ColorSequence.new{
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(30,80,200)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(5,10,50))} })
+        tw(AIM.btnStroke,  TW.FAST, { Color=ICE.STROKE_IDLE, Transparency=0.10 })
+        tw(AIM.rootStroke, TW.FAST, { Color=ICE.STROKE_IDLE, Transparency=0 })
+        tw(AIM.rootGrad, TW.MED, { Color=ColorSequence.new{
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(8,20,80)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(2,4,28))} })
+        tw(AIM.icon, TW.FAST, { TextColor3=ICE.FROST })
+        tw(AIM.lbl,  TW.FAST, { TextColor3=ICE.TEXT_DIM })
+        tw(AIM.bar,  TW.MED,  { BackgroundColor3=ICE.PURE })
+        AIM.icon.Text = "❄"
+    end
+end
+
+
+
+local function makeDraggable(btnData)
+    local drag, ds, sp = false, nil, nil
+    local moved = false
+
+    btnData.btn.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.Touch
+        or i.UserInputType == Enum.UserInputType.MouseButton1 then
+            drag = true; ds = i.Position; sp = btnData.root.Position; moved = false
+            onPressDown(btnData)
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then
+                    drag = false
+                    onPressUp(btnData)
+                end
+            end)
+        end
+    end)
+
+    btnData.btn.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType == Enum.UserInputType.Touch
+                  or i.UserInputType == Enum.UserInputType.MouseMovement) then
+            local d = i.Position - ds
+            if d.Magnitude > 8 then moved = true end
+            btnData.root.Position = UDim2.new(sp.X.Scale, sp.X.Offset+d.X, sp.Y.Scale, sp.Y.Offset+d.Y)
+        end
+    end)
+
+    return function() return moved end  -- wasMoved()
+end
+
+local lastGameTouchPos = nil
+
+local function isOnButton(pos)
+    local abs = AIM.root.AbsolutePosition; local sz = AIM.root.AbsoluteSize
+    return pos.X >= abs.X and pos.X <= abs.X+sz.X and pos.Y >= abs.Y and pos.Y <= abs.Y+sz.Y
+end
+
+UIS.TouchStarted:Connect(function(touch, _gp)
+    local pos = Vector2.new(touch.Position.X, touch.Position.Y)
+    if not isOnButton(pos) then lastGameTouchPos = pos; _G.AntiEmoLastTouchPos = pos end
+end)
+UIS.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        local pos = Vector2.new(i.Position.X, i.Position.Y)
+        if not isOnButton(pos) then lastGameTouchPos = pos; _G.AntiEmoLastTouchPos = pos end
+    end
+end)
+
+local function isAlive(p)
+    if not p.Character then return false end
+    local h = p.Character:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+local function getNearestToScreenPos(screenPos)
+    local best, bestDist = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and isAlive(p) then
+            local root = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local vp, onScreen = Camera:WorldToViewportPoint(root.Position)
+                if onScreen then
+                    local d = (Vector2.new(vp.X,vp.Y) - screenPos).Magnitude
+                    if d < bestDist then bestDist = d; best = p end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function refreshAim() setAimVisual(API.isLocked()) end
+
+local aimMoved = makeDraggable(AIM)
+
+AIM.btn.MouseButton1Click:Connect(function()
+    if aimMoved() then return end
+    local touchPos = lastGameTouchPos or UIS:GetMouseLocation()
+    local target   = getNearestToScreenPos(touchPos)
+    if API.isLocked() then
+        API.toggleAimLock()
+    elseif target and API.lockOnPlayer then
+        API.lockOnPlayer(target)
+    else
+        API.toggleAimLock()
+    end
+    refreshAim()
+end)
+
+task.spawn(function()
+    while task.wait(0.4) do
+        if not gui.Parent then break end
+        refreshAim()
+    end
+end)
+
+local function spawnEntrance(btnData, waitTime)
+    task.spawn(function()
+        local op = btnData.root.Position
+        btnData.root.Position = UDim2.new(op.X.Scale, op.X.Offset, op.Y.Scale, op.Y.Offset+110)
+        btnData.root.BackgroundTransparency = 1.0
+        btnData.btn.BackgroundTransparency  = 1.0
+        btnData.icon.TextTransparency       = 1.0
+        btnData.lbl.TextTransparency        = 1.0
+        for _, cd in ipairs(btnData.crystals) do cd.label.TextTransparency = 1.0 end
+
+        task.wait(waitTime)
+        tw(btnData.root, TW.RISE, { Position=UDim2.new(op.X.Scale,op.X.Offset,op.Y.Scale,op.Y.Offset), BackgroundTransparency=0 })
+        tw(btnData.btn,  TW.MED,    { BackgroundTransparency=0 })
+        tw(btnData.icon, TW.BOUNCE, { TextTransparency=0 })
+        tw(btnData.lbl,  TW.MED,    { TextTransparency=0 })
+        for i, cd in ipairs(btnData.crystals) do
+            delay(i*0.055, function() tw(cd.label, TW.SPRING, { TextTransparency=cd.baseTrans }) end)
+        end
+        delay(0.55, function() spawnBurst(btnData.btn, ICE.FROST, burstCharsIce) end)
+    end)
+end
+
+spawnEntrance(AIM, 0.20)
+
